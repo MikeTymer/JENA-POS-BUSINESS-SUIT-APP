@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and account settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Organization": {
+      "title": "Organization",
+      "description": "A business entity managed by one or more users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "plan": { "type": "string", "enum": ["basic", "essentials", "plus", "advanced"] },
+        "subscriptionStatus": { "type": "string", "enum": ["active", "past_due", "canceled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "ownerUid", "plan"]
+    },
+    "InventoryItem": {
+      "title": "Inventory Item",
+      "description": "A product or service in stock",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price": { "type": "number" },
+        "cost": { "type": "number" },
+        "category": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "quantity", "price", "cost"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial record of income or expense",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "referenceId": { "type": "string", "description": "Optional link to inventory item or invoice" }
+      },
+      "required": ["type", "amount", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "/organizations/{orgId}": {
+      "schema": "Organization",
+      "description": "Organization settings and subscription info"
+    },
+    "/organizations/{orgId}/inventory/{itemId}": {
+      "schema": "InventoryItem",
+      "description": "Stock management for the organization"
+    },
+    "/organizations/{orgId}/transactions/{txId}": {
+      "schema": "Transaction",
+      "description": "Financial ledger for the organization"
+    }
+  }
+}

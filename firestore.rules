@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isOrgOwner(orgId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt']) &&
+             data.uid is string && data.email is string &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidOrganization(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.ownerUid == request.auth.uid &&
+             data.plan in ['basic', 'essentials', 'plus', 'advanced'];
+    }
+
+    function isValidInventoryItem(data) {
+      return hasOnlyAllowedFields(['name', 'sku', 'quantity', 'price', 'cost', 'category', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.quantity is number && data.price is number && data.cost is number;
+    }
+
+    function isValidTransaction(data) {
+      return hasOnlyAllowedFields(['type', 'amount', 'category', 'description', 'date', 'createdAt', 'updatedAt']) &&
+             data.type in ['income', 'expense'] &&
+             data.amount is number && data.amount >= 0;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /organizations/{orgId} {
+      allow read: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidOrganization(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.ownerUid == request.auth.uid && isValidOrganization(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /organizations/{orgId}/inventory/{itemId} {
+      allow read: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+      allow create: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid && isValidInventoryItem(request.resource.data);
+      allow update: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid && isValidInventoryItem(request.resource.data);
+      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+    }
+
+    match /organizations/{orgId}/transactions/{txId} {
+      allow read: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+      allow create: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid && isValidTransaction(request.resource.data);
+      allow update: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid && isValidTransaction(request.resource.data);
+      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+    }
+  }
+}
