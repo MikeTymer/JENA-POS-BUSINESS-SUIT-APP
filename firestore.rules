@@ -13,7 +13,26 @@ service cloud.firestore {
     }
 
     function isOrgOwner(orgId) {
-      return isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+    }
+
+    function isStaffMember(orgId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/organizations/$(orgId)/staff/$(request.auth.uid));
+    }
+
+    function isStaff(orgId) {
+      return isAuthenticated() && (
+        isOrgOwner(orgId) || isStaffMember(orgId)
+      );
+    }
+
+    function hasRole(orgId, roles) {
+      return isAuthenticated() && (
+        isOrgOwner(orgId) || 
+        (isStaffMember(orgId) && get(/databases/$(database)/documents/organizations/$(orgId)/staff/$(request.auth.uid)).data.role in roles)
+      );
     }
 
     function hasRequiredFields(fields) {
@@ -34,22 +53,59 @@ service cloud.firestore {
     }
 
     function isValidOrganization(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt']) &&
+             data.id is string &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.ownerUid == request.auth.uid &&
-             data.plan in ['basic', 'essentials', 'plus', 'advanced'];
+             data.ownerUid is string &&
+             (!('country' in data) || data.country is string) &&
+             (!('currency' in data) || data.currency is string) &&
+             (!('address' in data) || data.address is string) &&
+             (!('uprsRegistrationNumber' in data) || data.uprsRegistrationNumber is string) &&
+             data.plan in ['trial', 'basic', 'essentials', 'plus', 'advanced'] &&
+             data.subscriptionStatus is string &&
+             data.createdAt is string &&
+             (!('updatedAt' in data) || data.updatedAt is string) &&
+             (!('expiresAt' in data) || data.expiresAt is string || data.expiresAt == null);
     }
 
     function isValidInventoryItem(data) {
-      return hasOnlyAllowedFields(['name', 'sku', 'quantity', 'price', 'cost', 'category', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['name', 'sku', 'quantity', 'price', 'cost', 'category', 'imageUrl', 'createdAt', 'updatedAt']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.quantity is number && data.price is number && data.cost is number;
+             data.quantity is number && data.price is number && data.cost is number &&
+             (!('imageUrl' in data) || data.imageUrl is string);
+    }
+
+    function isValidDamageRecord(data) {
+      return hasOnlyAllowedFields(['itemId', 'itemName', 'quantity', 'reason', 'imageUrl', 'date', 'reportedBy', 'createdAt', 'updatedAt']) &&
+             data.itemId is string && data.itemName is string &&
+             data.quantity is number && data.quantity > 0 &&
+             data.date is string &&
+             (!('imageUrl' in data) || data.imageUrl is string);
     }
 
     function isValidTransaction(data) {
-      return hasOnlyAllowedFields(['type', 'amount', 'category', 'description', 'date', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['type', 'amount', 'category', 'description', 'date', 'receiptId', 'createdAt', 'updatedAt']) &&
              data.type in ['income', 'expense'] &&
-             data.amount is number && data.amount >= 0;
+             data.amount is number && data.amount >= 0 &&
+             (!('receiptId' in data) || data.receiptId is string);
+    }
+
+    function isValidReceipt(data) {
+      return hasOnlyAllowedFields(['transactionId', 'items', 'subtotal', 'tax', 'total', 'amountPaid', 'balance', 'paymentMethod', 'date', 'cashierName', 'createdAt', 'updatedAt']) &&
+             data.items is list &&
+             data.total is number && data.total >= 0 &&
+             (!('amountPaid' in data) || data.amountPaid is number) &&
+             (!('balance' in data) || data.balance is number);
+    }
+
+    function isValidStaffMember(data) {
+      return hasOnlyAllowedFields(['id', 'uid', 'email', 'displayName', 'role', 'addedAt', 'updatedAt']) &&
+             data.email is string && data.role in ['admin', 'manager', 'cashier'];
+    }
+
+    function isValidMembership(data) {
+      return hasOnlyAllowedFields(['userId', 'orgId', 'role', 'orgName', 'email', 'updatedAt']) &&
+             data.orgId is string && data.role is string;
     }
 
     // ===============================================================
@@ -61,25 +117,68 @@ service cloud.firestore {
       allow update: if isOwner(userId) && isValidUser(request.resource.data);
     }
 
+    match /memberships/{membershipId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.email == request.auth.token.email
+      );
+      allow create: if hasRole(request.resource.data.orgId, ['admin']) && isValidMembership(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (resource.data.email == request.auth.token.email && request.resource.data.userId == request.auth.uid) ||
+        hasRole(resource.data.orgId, ['admin'])
+      );
+      allow delete: if hasRole(resource.data.orgId, ['admin']);
+    }
+
     match /organizations/{orgId} {
-      allow read: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
-      allow create: if isAuthenticated() && isValidOrganization(request.resource.data);
-      allow update: if isAuthenticated() && resource.data.ownerUid == request.auth.uid && isValidOrganization(request.resource.data);
-      allow delete: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        (resource != null && resource.data.ownerUid == request.auth.uid) ||
+        exists(/databases/$(database)/documents/organizations/$(orgId)/staff/$(request.auth.uid))
+      );
+      allow create: if isAuthenticated() && 
+                    isValidOrganization(request.resource.data) && 
+                    request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        (resource != null && resource.data.ownerUid == request.auth.uid) ||
+        (isStaffMember(orgId) && get(/databases/$(database)/documents/organizations/$(orgId)/staff/$(request.auth.uid)).data.role == 'admin')
+      ) && isValidOrganization(request.resource.data) && 
+      request.resource.data.ownerUid == resource.data.ownerUid &&
+      request.resource.data.id == resource.data.id &&
+      request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuthenticated() && resource != null && resource.data.ownerUid == request.auth.uid;
     }
 
     match /organizations/{orgId}/inventory/{itemId} {
-      allow read: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
-      allow create: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid && isValidInventoryItem(request.resource.data);
-      allow update: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid && isValidInventoryItem(request.resource.data);
-      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+      allow read: if isStaff(orgId);
+      allow create: if hasRole(orgId, ['admin', 'manager']) && isValidInventoryItem(request.resource.data);
+      allow update: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidInventoryItem(request.resource.data);
+      allow delete: if hasRole(orgId, ['admin', 'manager']);
     }
 
     match /organizations/{orgId}/transactions/{txId} {
-      allow read: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
-      allow create: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid && isValidTransaction(request.resource.data);
-      allow update: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid && isValidTransaction(request.resource.data);
-      allow delete: if isAuthenticated() && get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+      allow read: if hasRole(orgId, ['admin', 'manager', 'cashier']);
+      allow create: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidTransaction(request.resource.data);
+      allow update: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidTransaction(request.resource.data);
+      allow delete: if hasRole(orgId, ['admin']);
+    }
+
+    match /organizations/{orgId}/receipts/{receiptId} {
+      allow read: if isStaff(orgId);
+      allow create: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidReceipt(request.resource.data);
+      allow delete: if hasRole(orgId, ['admin']);
+    }
+
+    match /organizations/{orgId}/damages/{damageId} {
+      allow read: if isStaff(orgId);
+      allow create: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidDamageRecord(request.resource.data);
+      allow delete: if hasRole(orgId, ['admin']);
+    }
+
+    match /organizations/{orgId}/staff/{staffId} {
+      allow read: if isStaff(orgId);
+      allow create: if hasRole(orgId, ['admin']) && isValidStaffMember(request.resource.data);
+      allow update: if hasRole(orgId, ['admin']) && isValidStaffMember(request.resource.data);
+      allow delete: if hasRole(orgId, ['admin']);
     }
   }
 }

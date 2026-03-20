@@ -9,6 +9,7 @@
         "email": { "type": "string", "format": "email" },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
+        "phoneNumber": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email"]
@@ -21,6 +22,10 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "ownerUid": { "type": "string" },
+        "address": { "type": "string", "description": "Physical address or P.O. Box" },
+        "uprsRegistrationNumber": { "type": "string", "description": "UPRS registration number for the business" },
+        "country": { "type": "string", "description": "Business location country code (e.g., US, GB, NG)" },
+        "currency": { "type": "string", "description": "Business currency code (e.g., USD, GBP, NGN)" },
         "plan": { "type": "string", "enum": ["basic", "essentials", "plus", "advanced"] },
         "subscriptionStatus": { "type": "string", "enum": ["active", "past_due", "canceled"] },
         "createdAt": { "type": "string", "format": "date-time" }
@@ -39,7 +44,9 @@
         "price": { "type": "number" },
         "cost": { "type": "number" },
         "category": { "type": "string" },
-        "lastUpdated": { "type": "string", "format": "date-time" }
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "quantity", "price", "cost"]
     },
@@ -57,6 +64,76 @@
         "referenceId": { "type": "string", "description": "Optional link to inventory item or invoice" }
       },
       "required": ["type", "amount", "date"]
+    },
+    "StaffMember": {
+      "title": "Staff Member",
+      "description": "A user with access to an organization",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "manager", "cashier"] },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    },
+    "Membership": {
+      "title": "Membership",
+      "description": "User's access to an organization",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "orgId": { "type": "string" },
+        "role": { "type": "string" },
+        "orgName": { "type": "string" }
+      },
+      "required": ["userId", "orgId", "role"]
+    },
+    "Receipt": {
+      "title": "Receipt",
+      "description": "A record of a POS sale",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "total": { "type": "number" }
+            }
+          }
+        },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "cashierName": { "type": "string" }
+      },
+      "required": ["items", "total", "date"]
+    },
+    "DamageRecord": {
+      "title": "Damage Record",
+      "description": "A record of damaged stock",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "reason": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "reportedBy": { "type": "string" }
+      },
+      "required": ["itemId", "itemName", "quantity", "date"]
     }
   },
   "firestore": {
@@ -75,6 +152,22 @@
     "/organizations/{orgId}/transactions/{txId}": {
       "schema": "Transaction",
       "description": "Financial ledger for the organization"
+    },
+    "/organizations/{orgId}/staff/{staffId}": {
+      "schema": "StaffMember",
+      "description": "Team members and their roles"
+    },
+    "/organizations/{orgId}/receipts/{receiptId}": {
+      "schema": "Receipt",
+      "description": "Saved receipts for POS sales"
+    },
+    "/organizations/{orgId}/damages/{damageId}": {
+      "schema": "DamageRecord",
+      "description": "Records of damaged inventory items"
+    },
+    "/memberships/{membershipId}": {
+      "schema": "Membership",
+      "description": "Mapping of users to organizations"
     }
   }
 }
