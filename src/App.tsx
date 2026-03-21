@@ -47,7 +47,9 @@ import {
   HelpCircle,
   Printer,
   MapPin,
-  Hash
+  Hash,
+  Bell,
+  Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -110,6 +112,14 @@ interface DamageRecord {
   updatedAt: string;
 }
 
+interface TransactionItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  cost: number;
+}
+
 interface Transaction {
   id: string;
   type: 'income' | 'expense';
@@ -118,6 +128,9 @@ interface Transaction {
   description: string;
   date: string;
   receiptId?: string;
+  items?: TransactionItem[];
+  paymentMethod?: string;
+  phoneNumber?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -187,9 +200,15 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: any) => (
   </button>
 );
 
-const StatCard = ({ title, value, icon: Icon, trend, color }: any) => (
-  <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4">
-    <div className="flex justify-between items-start">
+const StatCard = ({ title, value, icon: Icon, trend, color, onClick }: any) => (
+  <button 
+    onClick={onClick}
+    className={cn(
+      "bg-zinc-900 border border-zinc-800 p-6 rounded-2xl text-left transition-all group",
+      onClick && "hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/5 cursor-pointer"
+    )}
+  >
+    <div className="flex justify-between items-start mb-4">
       <div className={cn("p-3 rounded-xl", color)}>
         <Icon className="w-6 h-6 text-white" />
       </div>
@@ -204,10 +223,10 @@ const StatCard = ({ title, value, icon: Icon, trend, color }: any) => (
       )}
     </div>
     <div>
-      <p className="text-zinc-400 text-sm font-medium">{title}</p>
-      <h3 className="text-2xl font-bold text-zinc-100 mt-1">{value}</h3>
+      <p className="text-zinc-400 text-sm font-medium uppercase tracking-wider">{title}</p>
+      <h3 className="text-2xl font-black text-zinc-100 mt-1">{value}</h3>
     </div>
-  </div>
+  </button>
 );
 
 const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () => void }) => {
@@ -483,7 +502,7 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
 
 // --- Admin Panel Component ---
 
-function Reports() {
+function Reports({ isManager }: { isManager: boolean }) {
   const { currentOrg } = useFirebase();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [receipts, setReceipts] = useState<ReceiptData[]>([]);
@@ -653,27 +672,29 @@ function Reports() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-zinc-100">Financial Reports</h2>
-        <div className="flex gap-3">
-          <button 
-            onClick={downloadReportPDF}
-            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl transition-colors border border-zinc-700"
-          >
-            <Download className="w-4 h-4" /> Export PDF
-          </button>
-          <select 
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as any)}
-            className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl text-sm font-bold text-zinc-400 outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="7">Last 7 Days</option>
-            <option value="30">Last 30 Days</option>
-            <option value="90">Last 90 Days</option>
-            <option value="all">All Time</option>
-          </select>
-        </div>
-      </div>
+      {isManager ? (
+        <>
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-zinc-100">Financial Reports</h2>
+            <div className="flex gap-3">
+              <button 
+                onClick={downloadReportPDF}
+                className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl transition-colors border border-zinc-700"
+              >
+                <Download className="w-4 h-4" /> Export PDF
+              </button>
+              <select 
+                value={period}
+                onChange={(e) => setPeriod(e.target.value as any)}
+                className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl text-sm font-bold text-zinc-400 outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="7">Last 7 Days</option>
+                <option value="30">Last 30 Days</option>
+                <option value="90">Last 90 Days</option>
+                <option value="all">All Time</option>
+              </select>
+            </div>
+          </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
@@ -910,6 +931,16 @@ function Reports() {
           <ReceiptModal receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
         )}
       </AnimatePresence>
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center">
+            <Lock className="w-8 h-8 text-zinc-600" />
+          </div>
+          <h3 className="text-xl font-bold text-zinc-100">Restricted Access</h3>
+          <p className="text-zinc-500 max-w-sm">You don't have permission to view business reports. Please contact your administrator.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -965,7 +996,7 @@ function ConfirmModal({
 }
 
 
-function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg }: { currentOrg: any, showNotification: any, setIsCreatingOrg: (val: boolean) => void }) {
+function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdmin }: { currentOrg: any, showNotification: any, setIsCreatingOrg: (val: boolean) => void, isSuperAdmin: boolean }) {
   const { user, userProfile, organizations, setCurrentOrg } = useFirebase();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [isAddingStaff, setIsAddingStaff] = useState(false);
@@ -977,7 +1008,7 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg }: { curren
   const [deletingOrgId, setDeletingOrgId] = useState<string | null>(null);
   const [adminTab, setAdminTab] = useState<'my-businesses' | 'staff'>('my-businesses');
 
-  const ownedOrgs = organizations.filter(o => o.ownerUid === user?.uid);
+  const ownedOrgs = isSuperAdmin ? organizations : organizations.filter(o => o.ownerUid === user?.uid);
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -993,9 +1024,9 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg }: { curren
     if (!currentOrg || !newStaffEmail.trim()) return;
     
     // Check limits
-    const limit = PLAN_LIMITS[userProfile?.plan || 'trial'].staff;
+    const limit = PLAN_LIMITS[currentOrg?.plan || 'trial'].staff;
     if (staff.length >= limit) {
-      showNotification(`Your ${userProfile?.plan} plan is limited to ${limit} staff member(s). Please upgrade to add more.`, 'error');
+      showNotification(`This business (${currentOrg?.name}) is on the ${currentOrg?.plan} plan which is limited to ${limit} staff member(s). Please upgrade the business plan to add more.`, 'error');
       return;
     }
     
@@ -1390,10 +1421,11 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg }: { curren
 
 // --- Main App Logic ---
 
-function Dashboard() {
+function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any) => void, isAdmin: boolean, isManager: boolean }) {
   const { currentOrg } = useFirebase();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [chartPeriod, setChartPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month');
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -1424,110 +1456,232 @@ function Dashboard() {
   }, [inventory, transactions]);
 
   const chartData = useMemo(() => {
-    const last30Days = Array.from({ length: 30 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (29 - i));
-      return d.toISOString().split('T')[0];
-    });
+    const now = new Date();
+    let periods: string[] = [];
+    let format: (d: Date) => string;
 
-    // Pre-group transactions by date for efficiency
+    if (chartPeriod === 'day') {
+      periods = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+      format = (d) => `${d.getHours()}:00`;
+    } else if (chartPeriod === 'week') {
+      periods = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        return d.toISOString().split('T')[0];
+      });
+      format = (d) => d.toLocaleDateString('en-US', { weekday: 'short' });
+    } else if (chartPeriod === 'month') {
+      periods = Array.from({ length: 30 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (29 - i));
+        return d.toISOString().split('T')[0];
+      });
+      format = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } else {
+      periods = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (11 - i));
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      });
+      format = (d) => d.toLocaleDateString('en-US', { month: 'short' });
+    }
+
     const groupedTxs = transactions.reduce((acc, tx) => {
-      if (!acc[tx.date]) acc[tx.date] = { income: 0, expense: 0 };
-      if (tx.type === 'income') acc[tx.date].income += tx.amount;
-      else acc[tx.date].expense += tx.amount;
+      let key = '';
+      const txDate = new Date(tx.date);
+      if (chartPeriod === 'day') key = `${txDate.getHours()}:00`;
+      else if (chartPeriod === 'year') key = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+      else key = tx.date;
+
+      if (!acc[key]) acc[key] = { income: 0, expense: 0 };
+      if (tx.type === 'income') acc[key].income += tx.amount;
+      else acc[key].expense += tx.amount;
       return acc;
     }, {} as Record<string, { income: number; expense: number }>);
 
-    const dailyData = last30Days.map(date => {
-      const stats = groupedTxs[date] || { income: 0, expense: 0 };
-      const displayDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return periods.map(p => {
+      const stats = groupedTxs[p] || { income: 0, expense: 0 };
+      let name = p;
+      if (chartPeriod !== 'day') {
+        const d = new Date(p + (chartPeriod === 'year' ? '-01' : ''));
+        name = format(d);
+      }
       
       return {
-        name: displayDate,
+        name,
         income: stats.income,
         expense: stats.expense,
-        fullDate: date
+        fullDate: p
       };
     });
+  }, [transactions, chartPeriod]);
 
-    return dailyData;
-  }, [transactions]);
+  const handleDownloadData = () => {
+    const headers = ['Date', 'Revenue', 'Expenses', 'Net'];
+    const rows = chartData.map(d => [
+      d.name,
+      d.income,
+      d.expense,
+      d.income - d.expense
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `revenue_vs_expenses_${chartPeriod}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Sales" value={formatCurrency(stats.totalSales, currentOrg?.currency)} icon={TrendingUp} color="bg-indigo-600" trend={12} />
-        <StatCard title="Total Expenses" value={formatCurrency(stats.totalExpenses, currentOrg?.currency)} icon={TrendingDown} color="bg-rose-600" trend={-5} />
-        <StatCard title="Stock Value" value={formatCurrency(stats.stockValue, currentOrg?.currency)} icon={Box} color="bg-amber-600" />
-        <StatCard title="Net Profit" value={formatCurrency(stats.profit, currentOrg?.currency)} icon={Wallet} color="bg-emerald-600" trend={8} />
-      </div>
+      {isManager ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard 
+              title="Total Sales" 
+              value={formatCurrency(stats.totalSales, currentOrg?.currency)} 
+              icon={TrendingUp} 
+              color="bg-indigo-600" 
+              trend={12} 
+              onClick={() => setActiveTab('sales-analytics')}
+            />
+            <StatCard 
+              title="Total Expenses" 
+              value={formatCurrency(stats.totalExpenses, currentOrg?.currency)} 
+              icon={TrendingDown} 
+              color="bg-rose-600" 
+              trend={-5} 
+              onClick={() => setActiveTab('expenses-analytics')}
+            />
+            <StatCard 
+              title="Stock Value" 
+              value={formatCurrency(stats.stockValue, currentOrg?.currency)} 
+              icon={Box} 
+              color="bg-amber-600" 
+              onClick={() => setActiveTab('inventory')}
+            />
+            <StatCard 
+              title="Net Profit" 
+              value={formatCurrency(stats.profit, currentOrg?.currency)} 
+              icon={Wallet} 
+              color="bg-emerald-600" 
+              trend={8} 
+              onClick={() => setActiveTab('profit-analytics')}
+            />
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-          <h3 className="text-lg font-bold text-zinc-100 mb-6">Revenue vs Expenses</h3>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis 
-                  dataKey="name" 
-                  stroke="#71717a" 
-                  fontSize={10} 
-                  tickLine={false} 
-                  axisLine={false} 
-                  interval={4} // Show every 5th day to avoid crowding
-                />
-                <YAxis 
-                  stroke="#71717a" 
-                  fontSize={10} 
-                  tickLine={false} 
-                  axisLine={false} 
-                  tickFormatter={(v) => `${getCurrencySymbol(currentOrg?.currency)}${v}`} 
-                />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px', fontSize: '12px' }}
-                  itemStyle={{ color: '#f4f4f5' }}
-                  cursor={{ fill: '#27272a', opacity: 0.4 }}
-                />
-                <Bar dataKey="income" name="Revenue" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={20} />
-                <Bar dataKey="expense" name="Expenses" fill="#e11d48" radius={[4, 4, 0, 0]} barSize={20} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-          <h3 className="text-lg font-bold text-zinc-100 mb-6">Recent Transactions</h3>
-          <div className="space-y-4">
-            {transactions.slice(0, 5).map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between p-3 hover:bg-zinc-800/50 rounded-xl transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "p-2 rounded-lg",
-                    tx.type === 'income' ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
-                  )}>
-                    {tx.type === 'income' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <h3 className="text-lg font-bold text-zinc-100">Revenue vs Expenses</h3>
+                <div className="flex items-center gap-2">
+                  <div className="flex bg-zinc-800 p-1 rounded-xl">
+                    {(['day', 'week', 'month', 'year'] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setChartPeriod(p)}
+                        className={cn(
+                          "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                          chartPeriod === p ? "bg-indigo-600 text-white" : "text-zinc-500 hover:text-zinc-300"
+                        )}
+                      >
+                        {p}
+                      </button>
+                    ))}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-zinc-100">{tx.category}</p>
-                    <p className="text-xs text-zinc-500">{formatDate(tx.date)}</p>
-                  </div>
+                  <button 
+                    onClick={handleDownloadData}
+                    className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl transition-all"
+                    title="Download Data"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
                 </div>
-                <p className={cn(
-                  "text-sm font-bold",
-                  tx.type === 'income' ? "text-emerald-500" : "text-rose-500"
-                )}>
-                  {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, currentOrg?.currency)}
-                </p>
               </div>
-            ))}
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke="#71717a" 
+                      fontSize={10} 
+                      tickLine={false} 
+                      axisLine={false} 
+                      interval={chartPeriod === 'month' ? 4 : 0}
+                    />
+                    <YAxis 
+                      stroke="#71717a" 
+                      fontSize={10} 
+                      tickLine={false} 
+                      axisLine={false} 
+                      tickFormatter={(v) => `${getCurrencySymbol(currentOrg?.currency)}${v}`} 
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px', fontSize: '12px' }}
+                      itemStyle={{ color: '#f4f4f5' }}
+                      cursor={{ fill: '#27272a', opacity: 0.4 }}
+                    />
+                    <Bar dataKey="income" name="Revenue" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="expense" name="Expenses" fill="#e11d48" radius={[4, 4, 0, 0]} barSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+              <h3 className="text-lg font-bold text-zinc-100 mb-6">Recent Transactions</h3>
+              <div className="space-y-4">
+                {transactions.slice(0, 5).map((tx) => (
+                  <button 
+                    key={tx.id} 
+                    onClick={() => setActiveTab('transactions')}
+                    className="flex items-center justify-between w-full p-3 hover:bg-zinc-800/50 rounded-xl transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "p-2 rounded-lg",
+                        tx.type === 'income' ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
+                      )}>
+                        {tx.type === 'income' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-zinc-100">{tx.category}</p>
+                        <p className="text-xs text-zinc-500">{formatDate(tx.date)}</p>
+                      </div>
+                    </div>
+                    <p className={cn(
+                      "text-sm font-bold",
+                      tx.type === 'income' ? "text-emerald-500" : "text-rose-500"
+                    )}>
+                      {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, currentOrg?.currency)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center">
+            <Lock className="w-8 h-8 text-zinc-600" />
+          </div>
+          <h3 className="text-xl font-bold text-zinc-100">Restricted Access</h3>
+          <p className="text-zinc-500 max-w-sm">You don't have permission to view the financial dashboard. Please contact your administrator.</p>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function Inventory({ showNotification }: { showNotification: (m: string, t?: 'success' | 'error') => void }) {
+function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNotification: (m: string, t?: 'success' | 'error') => void, isAdmin: boolean, isManager: boolean, isCashier: boolean }) {
   const { currentOrg, user, userProfile } = useFirebase();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isAdding, setIsAdding] = useState(false);
@@ -1608,9 +1762,9 @@ function Inventory({ showNotification }: { showNotification: (m: string, t?: 'su
     if (!currentOrg) return;
     
     // Check limits
-    const limit = PLAN_LIMITS[userProfile?.plan || 'trial'].inventory;
+    const limit = PLAN_LIMITS[currentOrg?.plan || 'trial'].inventory;
     if (items.length >= limit) {
-      showNotification(`Your ${userProfile?.plan} plan is limited to ${limit} inventory item(s). Please upgrade to add more.`, 'error');
+      showNotification(`This business is on the ${currentOrg?.plan} plan which is limited to ${limit} products. Please upgrade to add more.`, 'error');
       return;
     }
     
@@ -1745,8 +1899,14 @@ function Inventory({ showNotification }: { showNotification: (m: string, t?: 'su
         
         let importedCount = 0;
         const now = new Date().toISOString();
+        const limit = PLAN_LIMITS[currentOrg?.plan || 'trial'].inventory;
 
         for (const row of jsonData) {
+          if (items.length + importedCount >= limit) {
+            showNotification(`Import partially completed: This business is on the ${currentOrg?.plan} plan which is limited to ${limit} products.`, 'error');
+            break;
+          }
+
           const name = row.Name || row.name || '';
           const sku = row.SKU || row.sku || '';
           const category = row.Category || row.category || '';
@@ -1805,34 +1965,40 @@ function Inventory({ showNotification }: { showNotification: (m: string, t?: 'su
           >
             <Filter className="w-4 h-4" /> Filters
           </button>
-          <button 
-            onClick={exportToExcel}
-            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl transition-colors border border-zinc-700"
-            title="Download Excel template for re-upload"
-          >
-            <Download className="w-4 h-4 rotate-180" /> Download Template
-          </button>
-          <label className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl transition-colors border border-zinc-700 cursor-pointer">
-            <FileUp className="w-4 h-4" /> Upload Excel File
-            <input 
-              type="file" 
-              accept=".xlsx, .xls, .csv" 
-              className="hidden" 
-              onChange={handleImportExcel}
-            />
-          </label>
+          {isManager && (
+            <>
+              <button 
+                onClick={exportToExcel}
+                className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl transition-colors border border-zinc-700"
+                title="Download Excel template for re-upload"
+              >
+                <Download className="w-4 h-4 rotate-180" /> Download Template
+              </button>
+              <label className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl transition-colors border border-zinc-700 cursor-pointer">
+                <FileUp className="w-4 h-4" /> Upload Excel File
+                <input 
+                  type="file" 
+                  accept=".xlsx, .xls, .csv" 
+                  className="hidden" 
+                  onChange={handleImportExcel}
+                />
+              </label>
+            </>
+          )}
           <button 
             onClick={downloadStockPDF}
             className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl transition-colors border border-zinc-700"
           >
             <Download className="w-4 h-4" /> Export Report
           </button>
-          <button 
-            onClick={() => setIsAdding(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-indigo-600/20"
-          >
-            <Plus className="w-4 h-4" /> Add Item
-          </button>
+          {isManager && (
+            <button 
+              onClick={() => setIsAdding(true)}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-indigo-600/20"
+            >
+              <Plus className="w-4 h-4" /> Add Item
+            </button>
+          )}
         </div>
       </div>
 
@@ -1965,16 +2131,20 @@ function Inventory({ showNotification }: { showNotification: (m: string, t?: 'su
                   <td className="px-6 py-4 text-sm text-zinc-400">{formatCurrency(item.cost, currentOrg?.currency)}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => {
-                          setEditingItem(item);
-                          setIsEditing(true);
-                        }}
-                        className="p-2 text-zinc-500 hover:text-zinc-200 transition-colors"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete(item)} className="p-2 text-zinc-500 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      {isCashier && (
+                        <button 
+                          onClick={() => {
+                            setEditingItem(item);
+                            setIsEditing(true);
+                          }}
+                          className="p-2 text-zinc-500 hover:text-zinc-200 transition-colors"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {isManager && (
+                        <button onClick={() => handleDelete(item)} className="p-2 text-zinc-500 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -2220,7 +2390,7 @@ function Inventory({ showNotification }: { showNotification: (m: string, t?: 'su
   );
 }
 
-function Transactions({ showNotification }: { showNotification: (m: string, t?: 'success' | 'error') => void }) {
+function Transactions({ showNotification, isAdmin }: { showNotification: (m: string, t?: 'success' | 'error') => void, isAdmin: boolean }) {
   const { currentOrg } = useFirebase();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isAdding, setIsAdding] = useState(false);
@@ -2463,7 +2633,7 @@ function Transactions({ showNotification }: { showNotification: (m: string, t?: 
 }
 
 // --- POS View ---
-const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotification: (m: string, t?: 'success' | 'error') => void }) => {
+const POSView = ({ currentOrg, showNotification, createNotification, userProfile }: { currentOrg: any, showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, userProfile: any }) => {
   const { user } = useFirebase();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [cart, setCart] = useState<{item: InventoryItem, quantity: number}[]>([]);
@@ -2565,6 +2735,13 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
         amount: total,
         category: 'Sales',
         description: `POS Sale: ${cart.map(i => `${i.quantity}x ${i.item.name}`).join(', ')}`,
+        items: cart.map(i => ({
+          id: i.item.id,
+          name: i.item.name,
+          quantity: i.quantity,
+          price: i.item.price,
+          cost: i.item.cost
+        })),
         date: now,
         createdAt: now,
         updatedAt: now,
@@ -2573,6 +2750,14 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
       });
 
       if (!txId) throw new Error('Failed to create transaction');
+
+      // Create notification for sale
+      await createNotification(
+        'sale',
+        'New Sale Made',
+        `${userProfile?.displayName || 'A user'} made a sale of ${currentOrg.currency || 'UGX'} ${total.toLocaleString()}`,
+        { txId, total, itemsCount: cart.length }
+      );
 
       // 2. Create Receipt
       const receiptData = {
@@ -2903,7 +3088,7 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
   );
 };
 
-function Damages({ showNotification }: { showNotification: (m: string, t?: 'success' | 'error') => void }) {
+function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (m: string, t?: 'success' | 'error') => void, isAdmin: boolean, isCashier: boolean }) {
   const { currentOrg } = useFirebase();
   const [damages, setDamages] = useState<DamageRecord[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -3199,21 +3384,52 @@ function HelpSection() {
           ]}
         />
       </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-6">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-indigo-600/10 rounded-2xl">
+            <Users className="w-8 h-8 text-indigo-500" />
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold text-zinc-100">About Developer</h3>
+            <p className="text-zinc-400">Meet the mind behind JENA POS</p>
+          </div>
+        </div>
+        
+        <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
+          <div className="w-32 h-32 rounded-full bg-zinc-800 border-4 border-zinc-700 flex items-center justify-center overflow-hidden shrink-0">
+            <Sparkles className="w-16 h-16 text-indigo-500" />
+          </div>
+          <div className="space-y-4">
+            <h4 className="text-xl font-bold text-zinc-100">Micheal Sakwa</h4>
+            <p className="text-zinc-400 leading-relaxed">
+              Micheal Sakwa is a passionate software developer dedicated to building innovative solutions that empower small businesses. 
+              With a focus on user experience and robust functionality, he creates tools that simplify complex business processes. 
+              JENA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.
+            </p>
+            <div className="flex gap-4">
+              <a href="https://github.com/MichealSakwa" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 text-sm font-bold transition-colors">GitHub Profile</a>
+              <span className="text-zinc-700">|</span>
+              <span className="text-zinc-500 text-sm">Software Engineer & Product Designer</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 const PLAN_LIMITS = {
-  trial: { orgs: 1, inventory: 10, staff: 1 },
-  basic: { orgs: 1, inventory: 50, staff: 2 },
-  essentials: { orgs: 3, inventory: 200, staff: 5 },
-  plus: { orgs: 10, inventory: 1000, staff: 20 },
-  advanced: { orgs: 1000, inventory: 100000, staff: 1000 }
+  trial: { orgs: 1, inventory: 50, staff: Infinity },
+  basic: { orgs: 1, inventory: 200, staff: Infinity },
+  essentials: { orgs: 3, inventory: 1000, staff: Infinity },
+  plus: { orgs: 10, inventory: 2000, staff: Infinity },
+  advanced: { orgs: Infinity, inventory: 1000000, staff: Infinity }
 };
 
 const PLAN_DETAILS = {
   trial: { price: 0, limits: PLAN_LIMITS.trial, label: 'Trial' },
-  basic: { price: 10500, limits: PLAN_LIMITS.basic, label: 'Basic' },
+  basic: { price: 0, limits: PLAN_LIMITS.basic, label: 'Basic' },
   essentials: { price: 31500, limits: PLAN_LIMITS.essentials, label: 'Essentials' },
   plus: { price: 104500, limits: PLAN_LIMITS.plus, label: 'Plus' },
   advanced: { price: 250000, limits: PLAN_LIMITS.advanced, label: 'Advanced' }
@@ -3283,17 +3499,452 @@ function TrialTimer({ expiresAt }: { expiresAt: string }) {
   );
 }
 
+interface Notification {
+  id: string;
+  type: 'sale' | 'login' | 'logout' | 'system';
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  metadata?: any;
+}
+
+function SalesAnalytics() {
+  const { currentOrg } = useFirebase();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month');
+
+  useEffect(() => {
+    if (!currentOrg) return;
+    return subscribeToCollection<Transaction>(
+      `organizations/${currentOrg.id}/transactions`,
+      [],
+      setTransactions
+    );
+  }, [currentOrg]);
+
+  const sales = useMemo(() => transactions.filter(t => t.type === 'income'), [transactions]);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const filtered = sales.filter(s => {
+      const d = new Date(s.date);
+      if (period === 'day') return d.toDateString() === now.toDateString();
+      if (period === 'week') {
+        const weekAgo = new Date();
+        weekAgo.setDate(now.getDate() - 7);
+        return d >= weekAgo;
+      }
+      if (period === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return d.getFullYear() === now.getFullYear();
+    });
+
+    const total = filtered.reduce((acc, s) => acc + s.amount, 0);
+
+    // Best selling products
+    const productCounts: Record<string, { qty: number; revenue: number }> = {};
+    filtered.forEach(s => {
+      if (s.items) {
+        s.items.forEach(item => {
+          if (!productCounts[item.name]) productCounts[item.name] = { qty: 0, revenue: 0 };
+          productCounts[item.name].qty += item.quantity;
+          productCounts[item.name].revenue += item.price * item.quantity;
+        });
+      }
+    });
+    const bestProducts = Object.entries(productCounts)
+      .sort((a, b) => b[1].qty - a[1].qty)
+      .slice(0, 5);
+
+    // Best selling days
+    const dayCounts: Record<string, number> = {};
+    filtered.forEach(s => {
+      const day = new Date(s.date).toLocaleDateString('en-US', { weekday: 'long' });
+      dayCounts[day] = (dayCounts[day] || 0) + s.amount;
+    });
+    const bestDays = Object.entries(dayCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    return { total, bestProducts, bestDays };
+  }, [sales, period]);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-indigo-600/10 rounded-2xl">
+            <TrendingUp className="w-8 h-8 text-indigo-500" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold text-zinc-100">Sales Analytics</h2>
+            <p className="text-zinc-400">Detailed breakdown of your revenue performance</p>
+          </div>
+        </div>
+        <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+          {(['day', 'week', 'month', 'year'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={cn(
+                "px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all",
+                period === p ? "bg-indigo-600 text-white" : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl md:col-span-2">
+          <h3 className="text-lg font-bold text-zinc-100 mb-6">Best Selling Products</h3>
+          <div className="space-y-4">
+            {stats.bestProducts.length === 0 ? (
+              <p className="text-zinc-500 text-center py-10">No sales data for this period</p>
+            ) : stats.bestProducts.map(([name, data]) => (
+              <div key={name} className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl border border-zinc-800/50 hover:border-indigo-500/30 transition-colors">
+                <div>
+                  <p className="font-bold text-zinc-100">{name}</p>
+                  <p className="text-xs text-zinc-500">{data.qty} units sold</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-indigo-400">{formatCurrency(data.revenue, currentOrg?.currency)}</p>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Revenue</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+          <h3 className="text-lg font-bold text-zinc-100 mb-6">Best Selling Days</h3>
+          <div className="space-y-4">
+            {stats.bestDays.length === 0 ? (
+              <p className="text-zinc-500 text-center py-10">No sales data</p>
+            ) : stats.bestDays.map(([day, amount]) => (
+              <div key={day} className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl border border-zinc-800/50">
+                <p className="font-bold text-zinc-100">{day}</p>
+                <div className="text-right">
+                  <p className="font-bold text-emerald-400">{formatCurrency(amount, currentOrg?.currency)}</p>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Total</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExpensesAnalytics() {
+  const { currentOrg } = useFirebase();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month');
+
+  useEffect(() => {
+    if (!currentOrg) return;
+    return subscribeToCollection<Transaction>(
+      `organizations/${currentOrg.id}/transactions`,
+      [],
+      setTransactions
+    );
+  }, [currentOrg]);
+
+  const expenses = useMemo(() => transactions.filter(t => t.type === 'expense'), [transactions]);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const filtered = expenses.filter(s => {
+      const d = new Date(s.date);
+      if (period === 'day') return d.toDateString() === now.toDateString();
+      if (period === 'week') {
+        const weekAgo = new Date();
+        weekAgo.setDate(now.getDate() - 7);
+        return d >= weekAgo;
+      }
+      if (period === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return d.getFullYear() === now.getFullYear();
+    });
+
+    const total = filtered.reduce((acc, s) => acc + s.amount, 0);
+
+    // Most expenditure category
+    const catCounts: Record<string, number> = {};
+    filtered.forEach(s => {
+      catCounts[s.category] = (catCounts[s.category] || 0) + s.amount;
+    });
+    const topCategories = Object.entries(catCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    // Most expenditure days
+    const dayCounts: Record<string, number> = {};
+    filtered.forEach(s => {
+      const day = new Date(s.date).toLocaleDateString('en-US', { weekday: 'long' });
+      dayCounts[day] = (dayCounts[day] || 0) + s.amount;
+    });
+    const topDays = Object.entries(dayCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    return { total, topCategories, topDays };
+  }, [expenses, period]);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-rose-600/10 rounded-2xl">
+            <TrendingDown className="w-8 h-8 text-rose-500" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold text-zinc-100">Expenses Analytics</h2>
+            <p className="text-zinc-400">Detailed breakdown of your business costs</p>
+          </div>
+        </div>
+        <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+          {(['day', 'week', 'month', 'year'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={cn(
+                "px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all",
+                period === p ? "bg-indigo-600 text-white" : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl md:col-span-2">
+          <h3 className="text-lg font-bold text-zinc-100 mb-6">Top Expenditure Categories</h3>
+          <div className="space-y-4">
+            {stats.topCategories.length === 0 ? (
+              <p className="text-zinc-500 text-center py-10">No expense data for this period</p>
+            ) : stats.topCategories.map(([name, amount]) => (
+              <div key={name} className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl border border-zinc-800/50 hover:border-rose-500/30 transition-colors">
+                <p className="font-bold text-zinc-100">{name}</p>
+                <div className="text-right">
+                  <p className="font-bold text-rose-400">{formatCurrency(amount, currentOrg?.currency)}</p>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Total Cost</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+          <h3 className="text-lg font-bold text-zinc-100 mb-6">Most Expenditure Days</h3>
+          <div className="space-y-4">
+            {stats.topDays.length === 0 ? (
+              <p className="text-zinc-500 text-center py-10">No expense data</p>
+            ) : stats.topDays.map(([day, amount]) => (
+              <div key={day} className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl border border-zinc-800/50">
+                <p className="font-bold text-zinc-100">{day}</p>
+                <div className="text-right">
+                  <p className="font-bold text-rose-400">{formatCurrency(amount, currentOrg?.currency)}</p>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Total</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfitAnalytics() {
+  const { currentOrg } = useFirebase();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    if (!currentOrg) return;
+    return subscribeToCollection<Transaction>(
+      `organizations/${currentOrg.id}/transactions`,
+      [],
+      setTransactions
+    );
+  }, [currentOrg]);
+
+  const saleProfits = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'income' && t.items)
+      .map(t => {
+        const cost = t.items!.reduce((acc, item) => acc + (item.cost * item.quantity), 0);
+        const profit = t.amount - cost;
+        return { ...t, profit };
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [transactions]);
+
+  const totalProfit = useMemo(() => saleProfits.reduce((acc, s) => acc + s.profit, 0), [saleProfits]);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center gap-4">
+        <div className="p-3 bg-emerald-600/10 rounded-2xl">
+          <Wallet className="w-8 h-8 text-emerald-500" />
+        </div>
+        <div>
+          <h2 className="text-3xl font-bold text-zinc-100">Profit Analytics</h2>
+          <p className="text-zinc-400">Detailed breakdown of profit generated per sale</p>
+        </div>
+      </div>
+      
+      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-zinc-800/50 border-b border-zinc-800">
+                <th className="px-6 py-5 text-xs font-bold text-zinc-500 uppercase tracking-widest">Date</th>
+                <th className="px-6 py-5 text-xs font-bold text-zinc-500 uppercase tracking-widest">Items Sold</th>
+                <th className="px-6 py-5 text-xs font-bold text-zinc-500 uppercase tracking-widest text-right">Revenue</th>
+                <th className="px-6 py-5 text-xs font-bold text-zinc-500 uppercase tracking-widest text-right">Net Profit</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800">
+              {saleProfits.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-20 text-center text-zinc-500">No sales data available for profit calculation</td>
+                </tr>
+              ) : saleProfits.map((sale) => (
+                <tr key={sale.id} className="hover:bg-zinc-800/30 transition-colors group">
+                  <td className="px-6 py-4 text-sm text-zinc-400">{formatDate(sale.date)}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {sale.items?.map((i, idx) => (
+                        <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-800 text-[10px] font-bold text-zinc-300 border border-zinc-700">
+                          {i.name} x{i.quantity}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-medium text-zinc-100 text-right">
+                    {formatCurrency(sale.amount, currentOrg?.currency)}
+                  </td>
+                  <td className="px-6 py-4 text-sm font-bold text-emerald-500 text-right">
+                    {formatCurrency(sale.profit, currentOrg?.currency)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-emerald-600/5 border-t border-emerald-600/20">
+                <td colSpan={3} className="px-6 py-8 text-xl font-black text-zinc-100 text-right uppercase tracking-widest">Total Net Profit</td>
+                <td className="px-6 py-8 text-2xl font-black text-emerald-500 text-right">
+                  {formatCurrency(totalProfit, currentOrg?.currency)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MainApp() {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'transactions' | 'reports' | 'settings' | 'pos' | 'admin' | 'damages' | 'help'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'transactions' | 'reports' | 'settings' | 'pos' | 'admin' | 'damages' | 'help' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics'>('dashboard');
   const [showHelpReminder, setShowHelpReminder] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCreatingOrg, setIsCreatingOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
+
+  const currentStaffMember = staff.find(s => s.uid === user?.uid || s.email === user?.email);
+  const isSuperAdmin = user?.email === 'sakwamikes@gmail.com';
+  const isAdmin = currentOrg?.ownerUid === user?.uid || currentStaffMember?.role === 'admin' || isSuperAdmin;
+  const isManager = isAdmin || currentStaffMember?.role === 'manager';
+  const isCashier = isManager || currentStaffMember?.role === 'cashier';
+
+  const isExpired = currentOrg?.expiresAt && new Date(currentOrg.expiresAt) < new Date() && !isSuperAdmin;
+
+  const getPlanLimits = (plan: string | undefined) => {
+    const p = (plan || 'trial').toLowerCase() as keyof typeof PLAN_LIMITS;
+    return PLAN_LIMITS[p] || PLAN_LIMITS.trial;
+  };
+
+  const orgLimits = getPlanLimits(userProfile?.plan);
+  const currentOrgLimits = getPlanLimits(currentOrg?.plan);
+
+  const createNotification = async (type: 'sale' | 'login' | 'logout' | 'system', title: string, message: string, metadata: any = {}) => {
+    if (!currentOrg) return;
+    try {
+      await createDocument(`organizations/${currentOrg.id}/notifications`, {
+        type,
+        title,
+        message,
+        timestamp: new Date().toISOString(),
+        read: false,
+        metadata
+      });
+    } catch (error) {
+      console.error('Error creating notification:', error);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (userProfile && currentOrg) {
+      await createNotification(
+        'logout',
+        'User Logged Out',
+        `${userProfile.displayName || userProfile.email} has logged out of the system.`,
+        { userId: userProfile.uid, email: userProfile.email }
+      );
+    }
+    await signOut(auth);
+  };
+
+  // Track login
+  useEffect(() => {
+    if (userProfile && currentOrg) {
+      const lastLogin = sessionStorage.getItem(`last_login_${currentOrg.id}_${userProfile.uid}`);
+      if (!lastLogin) {
+        createNotification(
+          'login',
+          'User Logged In',
+          `${userProfile.displayName || userProfile.email} has logged into the system.`,
+          { userId: userProfile.uid, email: userProfile.email }
+        );
+        sessionStorage.setItem(`last_login_${currentOrg.id}_${userProfile.uid}`, new Date().toISOString());
+      }
+    }
+  }, [userProfile?.uid, currentOrg?.id]);
+
+  // Fetch notifications
+  useEffect(() => {
+    if (!currentOrg) return;
+    const unsubscribe = subscribeToCollection<Notification>(
+      `organizations/${currentOrg.id}/notifications`,
+      [],
+      (data) => {
+        setNotifications(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      }
+    );
+    return () => unsubscribe();
+  }, [currentOrg?.id]);
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    if (!currentOrg) return;
+    try {
+      await updateDocument(`organizations/${currentOrg.id}/notifications`, notificationId, { read: true });
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -3326,16 +3977,19 @@ function MainApp() {
     const limit = PLAN_LIMITS[userProfile.plan || 'trial'].orgs;
     
     if (ownedOrgs.length >= limit) {
-      showNotification(`Only the ${limit} business profile(s) allowed for each plan is allowed. To make another business profile, one may have to subscribe to a higher package.`, 'error');
+      showNotification(`You have reached the limit of ${limit} business profile(s) for your current plan. Please upgrade to create more.`, 'error');
       return;
     }
 
     const orgId = Math.random().toString(36).substring(7);
     try {
       const isFirstOrg = ownedOrgs.length === 0;
-      const expiresAt = isFirstOrg && userProfile.plan === 'trial' 
-        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() 
-        : null;
+      const isPaidPlan = userProfile.plan !== 'trial' && userProfile.plan !== 'basic';
+      
+      // Set expiration: 14 days for trial/basic, 30 days for paid plans
+      const trialDays = 14;
+      const paidDays = 30;
+      const expiresAt = new Date(Date.now() + (isPaidPlan ? paidDays : trialDays) * 24 * 60 * 60 * 1000).toISOString();
 
       const success = await setDocument('organizations', orgId, {
         id: orgId,
@@ -3345,7 +3999,7 @@ function MainApp() {
         currency: 'USD',
         address: '',
         uprsRegistrationNumber: '',
-        plan: userProfile.plan === 'trial' ? 'trial' : 'essentials',
+        plan: userProfile.plan,
         subscriptionStatus: 'active',
         createdAt: new Date().toISOString(),
         ...(expiresAt && { expiresAt })
@@ -3379,10 +4033,22 @@ function MainApp() {
     }
   };
 
-  const handleUpdatePlan = (newPlan: string) => {
+  const handleUpdatePlan = async (newPlan: string) => {
     if (!user) return;
-    updateDocument('users', user.uid, { plan: newPlan });
-    showNotification(`Plan updated to ${newPlan}!`);
+    const isPaidPlan = newPlan !== 'trial' && newPlan !== 'basic';
+    await updateDocument('users', user.uid, { plan: newPlan });
+    
+    // Update all owned organizations
+    const ownedOrgs = organizations.filter(o => o.ownerUid === user.uid);
+    for (const org of ownedOrgs) {
+      const updates: any = { plan: newPlan };
+      // Reset expiration when plan is updated (simulating payment)
+      const days = isPaidPlan ? 30 : 14;
+      updates.expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+      await updateDocument('organizations', org.id, updates);
+    }
+    
+    showNotification(`Plan updated to ${newPlan}! All your businesses have been upgraded.`);
   };
 
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
@@ -3451,7 +4117,7 @@ function MainApp() {
                 Find Existing
               </button>
               <button 
-                onClick={() => signOut(auth)}
+                onClick={handleSignOut}
                 className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 font-bold py-3 rounded-2xl transition-all flex items-center justify-center gap-2"
               >
                 <LogOut className="w-4 h-4" />
@@ -3539,28 +4205,31 @@ function MainApp() {
             <SidebarItem icon={AlertTriangle} label={isSidebarOpen ? "Damages" : ""} active={activeTab === 'damages'} onClick={() => { setActiveTab('damages'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             <SidebarItem icon={Receipt} label={isSidebarOpen ? "Transactions" : ""} active={activeTab === 'transactions'} onClick={() => { setActiveTab('transactions'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             <SidebarItem icon={BarChart3} label={isSidebarOpen ? "Reports" : ""} active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            {currentOrg?.ownerUid === user?.uid && (
+            {isAdmin && (
               <SidebarItem icon={ShieldCheck} label={isSidebarOpen ? "Admin" : ""} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             )}
             <SidebarItem icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             <SidebarItem icon={HelpCircle} label={isSidebarOpen ? "Help" : ""} active={activeTab === 'help'} onClick={() => { setActiveTab('help'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             
             {isSidebarOpen && (
-              <div className="mt-8 px-4 py-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/50 space-y-3">
+              <div 
+                onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }}
+                className="mt-8 px-4 py-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/50 space-y-3 cursor-pointer hover:bg-zinc-800 transition-colors"
+              >
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Plan Usage</span>
-                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">{currentOrg?.plan}</span>
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">{currentOrg?.plan || 'trial'}</span>
                 </div>
                 
                 <div className="space-y-2">
                   <div className="flex justify-between text-[10px] font-medium text-zinc-400">
                     <span>Organizations</span>
-                    <span>{organizations.length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].orgs}</span>
+                    <span>{organizations.filter(o => o.ownerUid === user?.uid).length} / {orgLimits.orgs === Infinity ? 'Unlimited' : orgLimits.orgs}</span>
                   </div>
                   <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, (organizations.length / PLAN_LIMITS[userProfile?.plan || 'trial'].orgs) * 100)}%` }}
+                      style={{ width: `${orgLimits.orgs === Infinity ? 0 : Math.min(100, (organizations.filter(o => o.ownerUid === user?.uid).length / orgLimits.orgs) * 100)}%` }}
                     />
                   </div>
                 </div>
@@ -3568,12 +4237,12 @@ function MainApp() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-[10px] font-medium text-zinc-400">
                     <span>Inventory</span>
-                    <span>{inventory.length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].inventory}</span>
+                    <span>{inventory.length} / {currentOrgLimits.inventory === Infinity ? 'Unlimited' : currentOrgLimits.inventory}</span>
                   </div>
                   <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-amber-500 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, (inventory.length / PLAN_LIMITS[userProfile?.plan || 'trial'].inventory) * 100)}%` }}
+                      style={{ width: `${currentOrgLimits.inventory === Infinity ? 0 : Math.min(100, (inventory.length / currentOrgLimits.inventory) * 100)}%` }}
                     />
                   </div>
                 </div>
@@ -3581,12 +4250,12 @@ function MainApp() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-[10px] font-medium text-zinc-400">
                     <span>Staff</span>
-                    <span>{staff.length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].staff}</span>
+                    <span>{staff.length} / {currentOrgLimits.staff === Infinity ? 'Unlimited' : currentOrgLimits.staff}</span>
                   </div>
                   <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, (staff.length / PLAN_LIMITS[userProfile?.plan || 'trial'].staff) * 100)}%` }}
+                      style={{ width: `${currentOrgLimits.staff === Infinity ? 0 : Math.min(100, (staff.length / currentOrgLimits.staff) * 100)}%` }}
                     />
                   </div>
                 </div>
@@ -3596,7 +4265,7 @@ function MainApp() {
 
           <div className="pt-4 border-t border-zinc-800 space-y-2">
             <button 
-              onClick={() => signOut(auth)}
+              onClick={handleSignOut}
               className="flex items-center gap-3 w-full px-4 py-3 text-zinc-500 hover:text-rose-500 transition-colors"
             >
               <LogOut className="w-5 h-5" />
@@ -3628,10 +4297,120 @@ function MainApp() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl">
-              <CreditCard className="w-4 h-4 text-amber-500" />
-              <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">{currentOrg?.plan} Plan</span>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-indigo-500 hover:border-indigo-500/50 transition-all relative"
+              >
+                <Bell className="w-5 h-5" />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-[10px] font-bold text-white rounded-full flex items-center justify-center border-2 border-zinc-950">
+                    {notifications.filter(n => !n.read).length}
+                  </span>
+                )}
+              </button>
+
+              <AnimatePresence>
+                {showNotifications && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowNotifications(false)} 
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute top-full mt-3 right-0 w-80 sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                    >
+                      <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+                        <h3 className="font-bold text-zinc-100">Notifications</h3>
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                          {notifications.length} Total
+                        </span>
+                      </div>
+                      <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                        {notifications.length === 0 ? (
+                          <div className="p-10 text-center space-y-2">
+                            <Bell className="w-8 h-8 text-zinc-700 mx-auto" />
+                            <p className="text-sm text-zinc-500">No notifications yet</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-zinc-800/50">
+                            {notifications.map((n) => (
+                              <div 
+                                key={n.id} 
+                                onClick={() => markNotificationAsRead(n.id)}
+                                className={cn(
+                                  "p-4 hover:bg-zinc-800/50 transition-colors cursor-pointer group",
+                                  !n.read && "bg-indigo-500/5"
+                                )}
+                              >
+                                <div className="flex gap-3">
+                                  <div className={cn(
+                                    "mt-1 w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                                    n.type === 'sale' ? "bg-emerald-500/10 text-emerald-500" :
+                                    n.type === 'login' ? "bg-indigo-500/10 text-indigo-500" :
+                                    n.type === 'logout' ? "bg-amber-500/10 text-amber-500" :
+                                    "bg-zinc-500/10 text-zinc-500"
+                                  )}>
+                                    {n.type === 'sale' ? <ShoppingCart className="w-4 h-4" /> :
+                                     n.type === 'login' ? <ShieldCheck className="w-4 h-4" /> :
+                                     n.type === 'logout' ? <LogOut className="w-4 h-4" /> :
+                                     <Bell className="w-4 h-4" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className={cn("text-sm font-bold truncate", n.read ? "text-zinc-400" : "text-zinc-100")}>
+                                        {n.title}
+                                      </p>
+                                      <span className="text-[10px] text-zinc-500 whitespace-nowrap">
+                                        {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2 leading-relaxed">
+                                      {n.message}
+                                    </p>
+                                    {n.type === 'sale' && n.metadata?.total && (
+                                      <div className="mt-2 flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded uppercase">
+                                          {n.metadata.total.toLocaleString()} UGX
+                                        </span>
+                                        <span className="text-[10px] text-zinc-500">
+                                          {n.metadata.items} items
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {notifications.length > 0 && (
+                        <div className="p-3 bg-zinc-900/80 border-t border-zinc-800 text-center">
+                          <button 
+                            onClick={() => setShowNotifications(false)}
+                            className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest"
+                          >
+                            Close Panel
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
+
+            <button 
+              onClick={() => setActiveTab('settings')}
+              className="hidden sm:flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl hover:bg-zinc-800 transition-colors group"
+            >
+              <CreditCard className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">{currentOrg?.plan} Plan</span>
+            </button>
             <div className="relative">
               <button 
                 onClick={() => { setActiveTab('help'); setShowHelpReminder(false); }}
@@ -3651,20 +4430,65 @@ function MainApp() {
         </header>
 
         <main className="flex-1 p-6 lg:p-10 overflow-y-auto custom-scrollbar">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} />}
-            {activeTab === 'inventory' && <Inventory showNotification={showNotification} />}
-            {activeTab === 'damages' && <Damages showNotification={showNotification} />}
-            {activeTab === 'transactions' && <Transactions showNotification={showNotification} />}
-            {activeTab === 'admin' && <AdminPanel currentOrg={currentOrg} showNotification={showNotification} setIsCreatingOrg={setIsCreatingOrg} />}
-            {activeTab === 'reports' && <Reports />}
-            {activeTab === 'help' && <HelpSection />}
+          {isExpired && activeTab !== 'settings' ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-6 max-w-2xl mx-auto">
+              <div className="w-24 h-24 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
+                <History className="w-12 h-12 text-rose-500" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-3xl font-black text-zinc-100 uppercase tracking-tighter">Subscription Expired</h2>
+                <p className="text-zinc-400 text-lg">Your trial or subscription period for <span className="text-zinc-100 font-bold">{currentOrg?.name}</span> has ended. Please renew your plan to continue using JENA POS.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+                <button 
+                  onClick={() => setActiveTab('settings')}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-indigo-600/20"
+                >
+                  Renew Subscription
+                </button>
+                <button 
+                  onClick={handleSignOut}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-4 rounded-2xl transition-all uppercase tracking-widest"
+                >
+                  Sign Out
+                </button>
+              </div>
+              <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl w-full text-left">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Why is my account locked?</p>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3 text-sm text-zinc-400">
+                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
+                    <span>Your 14-day trial period has concluded.</span>
+                  </li>
+                  <li className="flex items-start gap-3 text-sm text-zinc-400">
+                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
+                    <span>Your monthly subscription payment is overdue.</span>
+                  </li>
+                  <li className="flex items-start gap-3 text-sm text-zinc-400">
+                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
+                    <span>Access to inventory, sales, and reports is restricted until renewal.</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} isAdmin={isAdmin} isManager={isManager} />}
+              {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} createNotification={createNotification} userProfile={userProfile} />}
+              {activeTab === 'inventory' && <Inventory showNotification={showNotification} isAdmin={isAdmin} isManager={isManager} isCashier={isCashier} />}
+              {activeTab === 'damages' && <Damages showNotification={showNotification} isAdmin={isAdmin} isCashier={isCashier} />}
+              {activeTab === 'transactions' && <Transactions showNotification={showNotification} isAdmin={isAdmin} />}
+              {activeTab === 'admin' && <AdminPanel currentOrg={currentOrg} showNotification={showNotification} setIsCreatingOrg={setIsCreatingOrg} isSuperAdmin={isSuperAdmin} />}
+              {activeTab === 'reports' && <Reports isManager={isManager} />}
+              {activeTab === 'help' && <HelpSection />}
+              {activeTab === 'sales-analytics' && <SalesAnalytics />}
+              {activeTab === 'expenses-analytics' && <ExpensesAnalytics />}
+              {activeTab === 'profit-analytics' && <ProfitAnalytics />}
             {activeTab === 'settings' && (
               <div className="max-w-2xl space-y-8">
                 <h2 className="text-2xl font-bold text-zinc-100">Organization Settings</h2>
@@ -3747,7 +4571,7 @@ function MainApp() {
                     <div className="flex justify-between items-end">
                       <label className="text-xs font-bold text-zinc-500 uppercase">Account Subscription</label>
                       <span className="text-xs font-bold text-indigo-400">
-                        {organizations.filter(o => o.ownerUid === user?.uid).length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].orgs} Businesses Used
+                        {organizations.filter(o => o.ownerUid === user?.uid).length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].orgs === Infinity ? 'Unlimited' : PLAN_LIMITS[userProfile?.plan || 'trial'].orgs} Businesses Used
                       </span>
                     </div>
 
@@ -3761,19 +4585,38 @@ function MainApp() {
                           key={p} 
                           onClick={() => handleUpdatePlan(p)}
                           className={cn(
-                            "p-4 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden",
-                            userProfile?.plan === p ? "border-indigo-600 bg-indigo-600/5" : "border-zinc-800 bg-zinc-800/50 hover:border-zinc-700"
+                            "p-4 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between min-h-[160px]",
+                            userProfile?.plan === p ? "border-indigo-600 bg-indigo-600/5 shadow-lg shadow-indigo-500/10" : "border-zinc-800 bg-zinc-800/50 hover:border-zinc-700"
                           )}
                         >
-                          {userProfile?.plan === p && (
-                            <div className="absolute top-0 right-0 bg-indigo-600 text-[10px] font-black text-white px-2 py-0.5 rounded-bl-lg uppercase">
-                              Active
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <p className="text-sm font-bold text-zinc-100 uppercase">{details.label}</p>
+                              {userProfile?.plan === p && (
+                                <div className="bg-indigo-600 text-[10px] font-black text-white px-2 py-0.5 rounded-full uppercase">
+                                  Active
+                                </div>
+                              )}
                             </div>
-                          )}
-                          <p className="text-sm font-bold text-zinc-100 uppercase">{details.label}</p>
-                          <p className="text-xs text-zinc-500 mt-1">
-                            {getPlanPrice(details.price as number, currentOrg?.currency)} • {details.limits.orgs} Businesses
-                          </p>
+                            <p className="text-xs text-zinc-500 mt-1">
+                              {getPlanPrice(details.price as number, currentOrg?.currency)} • {details.limits.orgs === Infinity ? 'Unlimited' : details.limits.orgs} Businesses
+                            </p>
+                            <div className="mt-2 space-y-0.5 text-[10px] text-zinc-500 uppercase font-bold opacity-60">
+                              <p>{details.limits.inventory === Infinity ? 'Unlimited' : details.limits.inventory.toLocaleString()} Products</p>
+                              <p>{details.limits.staff === Infinity ? 'Unlimited' : details.limits.staff} Staff</p>
+                            </div>
+                          </div>
+
+                          <button 
+                            className={cn(
+                              "mt-4 w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
+                              userProfile?.plan === p 
+                                ? "bg-indigo-600 text-white cursor-default" 
+                                : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                            )}
+                          >
+                            {userProfile?.plan === p ? "Selected Plan" : "Select Plan"}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -3818,7 +4661,26 @@ function MainApp() {
               </div>
             )}
           </motion.div>
-        </main>
+        )}
+
+        <footer className="mt-auto pt-10 pb-6 border-t border-zinc-800/50">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2 text-zinc-500">
+              <span className="text-xs">© {new Date().getFullYear()}</span>
+              <span className="text-xs font-bold text-zinc-400">@MichealSakwa</span>
+              <span className="text-zinc-800">|</span>
+              <span className="text-xs">All rights reserved</span>
+              <span className="text-zinc-800">|</span>
+              <span className="text-[10px] text-zinc-600 italic">Terms & Conditions apply</span>
+            </div>
+            <div className="flex items-center gap-6">
+              <button className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest transition-colors">Terms & Conditions</button>
+              <button className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest transition-colors">Privacy Policy</button>
+              <button className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest transition-colors">Contact Support</button>
+            </div>
+          </div>
+        </footer>
+      </main>
       </div>
 
       <AnimatePresence>
@@ -3901,9 +4763,22 @@ function AuthScreen() {
           </div>
         </div>
 
-        <p className="text-xs text-zinc-600">
-          By continuing, you agree to our Terms of Service and Privacy Policy.
-        </p>
+        <div className="pt-8 border-t border-zinc-800/50 flex flex-col items-center gap-4">
+          <div className="flex items-center gap-2 text-zinc-500">
+            <span className="text-[10px] font-bold uppercase tracking-widest">© {new Date().getFullYear()} @MichealSakwa</span>
+            <span className="text-zinc-800">•</span>
+            <span className="text-[10px] uppercase tracking-widest">All rights reserved</span>
+            <span className="text-zinc-800">•</span>
+            <span className="text-[9px] text-zinc-600 italic">Terms & Conditions apply</span>
+          </div>
+          <div className="flex gap-6">
+            <button className="text-[10px] font-bold text-zinc-600 hover:text-zinc-400 uppercase tracking-widest transition-colors">Terms & Conditions</button>
+            <button className="text-[10px] font-bold text-zinc-600 hover:text-zinc-400 uppercase tracking-widest transition-colors">Privacy Policy</button>
+          </div>
+          <p className="text-[9px] text-zinc-700 max-w-[200px] leading-tight">
+            By continuing, you agree to our Terms and Conditions and Privacy Policy.
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -57,6 +57,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [ownedOrgs, setOwnedOrgs] = useState<Organization[]>([]);
+  const [staffOrgs, setStaffOrgs] = useState<Organization[]>([]);
+  const [staffOrgIds, setStaffOrgIds] = useState<string[]>([]);
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
 
   useEffect(() => {
@@ -76,7 +79,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 displayName: firebaseUser.displayName,
                 photoURL: firebaseUser.photoURL,
                 phoneNumber: firebaseUser.phoneNumber,
-                plan: 'trial',
+                plan: 'basic',
                 createdAt: new Date().toISOString()
               };
               await setDoc(userDocRef, newProfile);
@@ -106,92 +109,86 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
 
-    let unsubscribeMemberships: (() => void) | null = null;
-
-    // Fetch organizations where user is owner
+    // 1. Subscribe to owned organizations
     const ownedQuery = query(collection(db, 'organizations'), where('ownerUid', '==', user.uid));
-    const unsubscribeOwned = onSnapshot(ownedQuery, (ownedSnapshot) => {
-      const ownedOrgs = ownedSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Organization));
-      
-      // Fetch organizations where user is staff via memberships
-      const membershipsQuery = query(collection(db, 'memberships'), where('userId', '==', user.uid));
-      
-      // Also check for unclaimed memberships by email
-      const unclaimedQuery = query(collection(db, 'memberships'), where('email', '==', user.email), where('userId', '==', null));
+    const unsubOwned = onSnapshot(ownedQuery, (snapshot) => {
+      const owned = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Organization));
+      setOwnedOrgs(owned);
+    });
 
-      if (unsubscribeMemberships) unsubscribeMemberships();
-      
-      unsubscribeMemberships = onSnapshot(membershipsQuery, async (membershipSnapshot) => {
-        const staffOrgs: Organization[] = [];
-        
-        try {
-          // 1. Process existing memberships
-          for (const membershipDoc of membershipSnapshot.docs) {
-            const membership = membershipDoc.data();
-            const orgDoc = await getDoc(doc(db, 'organizations', membership.orgId));
-            if (orgDoc.exists()) {
-              staffOrgs.push({ id: orgDoc.id, ...orgDoc.data() } as Organization);
-            }
-          }
+    // 2. Subscribe to memberships to get staff organizations
+    const membershipsQuery = query(collection(db, 'memberships'), where('userId', '==', user.uid));
+    const unsubMemberships = onSnapshot(membershipsQuery, (snapshot) => {
+      const ids = snapshot.docs.map(doc => doc.data().orgId as string);
+      setStaffOrgIds(ids);
+    });
 
-          // 2. Check for unclaimed memberships
-          const unclaimedSnapshot = await getDocs(unclaimedQuery);
-          for (const unclaimedDoc of unclaimedSnapshot.docs) {
-            const data = unclaimedDoc.data();
-            // Claim it
-            await updateDocument('memberships', unclaimedDoc.id, { userId: user.uid });
-            
-            // Also create the staff record with UID as ID for security rules
-            await setDocument(`organizations/${data.orgId}/staff`, user.uid, {
-              id: user.uid,
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              role: data.role,
-              addedAt: new Date().toISOString()
-            });
-
-            // Add to list immediately if not already there
-            const orgDoc = await getDoc(doc(db, 'organizations', data.orgId));
-            if (orgDoc.exists() && !staffOrgs.find(o => o.id === orgDoc.id)) {
-              staffOrgs.push({ id: orgDoc.id, ...orgDoc.data() } as Organization);
-            }
-          }
-
-          // Combine and unique by ID
-          const allOrgs = [...ownedOrgs];
-          staffOrgs.forEach(org => {
-            if (!allOrgs.find(o => o.id === org.id)) {
-              allOrgs.push(org);
-            }
-          });
-
-          setOrganizations(allOrgs);
-          
-          if (allOrgs.length > 0) {
-            setCurrentOrg(prev => {
-              if (!prev) return allOrgs[0];
-              const updated = allOrgs.find(o => o.id === prev.id);
-              return updated || allOrgs[0];
-            });
-          } else {
-            setCurrentOrg(null);
-          }
-        } catch (error) {
-          console.error("Error processing memberships:", error);
-        }
-      }, (error) => {
-        console.error("Error fetching memberships:", error);
-      });
-    }, (error) => {
-      console.error("Error fetching owned organizations:", error);
+    // 3. Check for unclaimed memberships
+    const unclaimedQuery = query(collection(db, 'memberships'), where('email', '==', user.email), where('userId', '==', null));
+    const unsubUnclaimed = onSnapshot(unclaimedQuery, async (snapshot) => {
+      for (const d of snapshot.docs) {
+        const data = d.data();
+        await updateDocument('memberships', d.id, { userId: user.uid });
+        await setDocument(`organizations/${data.orgId}/staff`, user.uid, {
+          id: user.uid,
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          role: data.role,
+          addedAt: new Date().toISOString()
+        });
+      }
     });
 
     return () => {
-      unsubscribeOwned();
-      if (unsubscribeMemberships) unsubscribeMemberships();
+      unsubOwned();
+      unsubMemberships();
+      unsubUnclaimed();
     };
   }, [user]);
+
+  // 4. Subscribe to staff organizations individually for real-time updates
+  useEffect(() => {
+    if (!user || staffOrgIds.length === 0) {
+      setStaffOrgs([]);
+      return;
+    }
+
+    const unsubs = staffOrgIds.map(id => 
+      onSnapshot(doc(db, 'organizations', id), (docSnap) => {
+        if (docSnap.exists()) {
+          setStaffOrgs(prev => {
+            const other = prev.filter(o => o.id !== id);
+            return [...other, { id: docSnap.id, ...docSnap.data() } as Organization];
+          });
+        }
+      })
+    );
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, [user, staffOrgIds]);
+
+  // 5. Combine and set final organizations list
+  useEffect(() => {
+    const all = [...ownedOrgs];
+    staffOrgs.forEach(org => {
+      if (!all.find(o => o.id === org.id)) {
+        all.push(org);
+      }
+    });
+    
+    setOrganizations(all);
+    
+    if (all.length > 0) {
+      setCurrentOrg(prev => {
+        if (!prev) return all[0];
+        const updated = all.find(o => o.id === prev.id);
+        return updated || all[0];
+      });
+    } else {
+      setCurrentOrg(null);
+    }
+  }, [ownedOrgs, staffOrgs]);
 
   return (
     <FirebaseContext.Provider value={{ user, userProfile, loading, organizations, currentOrg, setCurrentOrg, isAuthReady }}>

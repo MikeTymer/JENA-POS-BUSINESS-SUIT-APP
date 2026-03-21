@@ -8,13 +8,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        request.auth.token.email == "sakwamikes@gmail.com" && 
+        request.auth.token.email_verified == true;
+    }
+
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isAuthenticated() && (request.auth.uid == userId || isSuperAdmin());
     }
 
     function isOrgOwner(orgId) {
-      return isAuthenticated() && 
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid
+      );
     }
 
     function isStaffMember(orgId) {
@@ -24,12 +32,13 @@ service cloud.firestore {
 
     function isStaff(orgId) {
       return isAuthenticated() && (
-        isOrgOwner(orgId) || isStaffMember(orgId)
+        isSuperAdmin() || isOrgOwner(orgId) || isStaffMember(orgId)
       );
     }
 
     function hasRole(orgId, roles) {
       return isAuthenticated() && (
+        isSuperAdmin() ||
         isOrgOwner(orgId) || 
         (isStaffMember(orgId) && get(/databases/$(database)/documents/organizations/$(orgId)/staff/$(request.auth.uid)).data.role in roles)
       );
@@ -84,10 +93,13 @@ service cloud.firestore {
     }
 
     function isValidTransaction(data) {
-      return hasOnlyAllowedFields(['type', 'amount', 'category', 'description', 'date', 'receiptId', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['type', 'amount', 'category', 'description', 'date', 'receiptId', 'items', 'paymentMethod', 'phoneNumber', 'createdAt', 'updatedAt']) &&
              data.type in ['income', 'expense'] &&
              data.amount is number && data.amount >= 0 &&
-             (!('receiptId' in data) || data.receiptId is string);
+             (!('receiptId' in data) || data.receiptId is string) &&
+             (!('items' in data) || data.items is list) &&
+             (!('paymentMethod' in data) || data.paymentMethod is string) &&
+             (!('phoneNumber' in data) || data.phoneNumber is string);
     }
 
     function isValidReceipt(data) {
@@ -101,6 +113,14 @@ service cloud.firestore {
     function isValidStaffMember(data) {
       return hasOnlyAllowedFields(['id', 'uid', 'email', 'displayName', 'role', 'addedAt', 'updatedAt']) &&
              data.email is string && data.role in ['admin', 'manager', 'cashier'];
+    }
+
+    function isValidNotification(data) {
+      return hasOnlyAllowedFields(['type', 'title', 'message', 'timestamp', 'read', 'metadata', 'createdAt', 'updatedAt']) &&
+             data.type in ['sale', 'login', 'logout', 'system'] &&
+             data.title is string && data.message is string &&
+             data.timestamp is string &&
+             (!('read' in data) || data.read is bool);
     }
 
     function isValidMembership(data) {
@@ -119,33 +139,38 @@ service cloud.firestore {
 
     match /memberships/{membershipId} {
       allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
         resource.data.userId == request.auth.uid || 
         resource.data.email == request.auth.token.email
       );
-      allow create: if hasRole(request.resource.data.orgId, ['admin']) && isValidMembership(request.resource.data);
+      allow create: if (isSuperAdmin() || hasRole(request.resource.data.orgId, ['admin'])) && isValidMembership(request.resource.data);
       allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
         (resource.data.email == request.auth.token.email && request.resource.data.userId == request.auth.uid) ||
         hasRole(resource.data.orgId, ['admin'])
       );
-      allow delete: if hasRole(resource.data.orgId, ['admin']);
+      allow delete: if isSuperAdmin() || hasRole(resource.data.orgId, ['admin']);
     }
 
     match /organizations/{orgId} {
       allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
         (resource != null && resource.data.ownerUid == request.auth.uid) ||
         exists(/databases/$(database)/documents/organizations/$(orgId)/staff/$(request.auth.uid))
       );
       allow create: if isAuthenticated() && 
-                    isValidOrganization(request.resource.data) && 
-                    request.resource.data.ownerUid == request.auth.uid;
+                    (isSuperAdmin() || (isValidOrganization(request.resource.data) && request.resource.data.ownerUid == request.auth.uid));
       allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
         (resource != null && resource.data.ownerUid == request.auth.uid) ||
         (isStaffMember(orgId) && get(/databases/$(database)/documents/organizations/$(orgId)/staff/$(request.auth.uid)).data.role == 'admin')
       ) && isValidOrganization(request.resource.data) && 
-      request.resource.data.ownerUid == resource.data.ownerUid &&
-      request.resource.data.id == resource.data.id &&
-      request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if isAuthenticated() && resource != null && resource.data.ownerUid == request.auth.uid;
+      (isSuperAdmin() || (
+        request.resource.data.ownerUid == resource.data.ownerUid &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.createdAt == resource.data.createdAt
+      ));
+      allow delete: if isAuthenticated() && (isSuperAdmin() || (resource != null && resource.data.ownerUid == request.auth.uid));
     }
 
     match /organizations/{orgId}/inventory/{itemId} {
@@ -178,6 +203,13 @@ service cloud.firestore {
       allow read: if isStaff(orgId);
       allow create: if hasRole(orgId, ['admin']) && isValidStaffMember(request.resource.data);
       allow update: if hasRole(orgId, ['admin']) && isValidStaffMember(request.resource.data);
+      allow delete: if hasRole(orgId, ['admin']);
+    }
+
+    match /organizations/{orgId}/notifications/{notificationId} {
+      allow read: if isStaff(orgId);
+      allow create: if isAuthenticated() && isStaff(orgId) && isValidNotification(request.resource.data);
+      allow update: if hasRole(orgId, ['admin', 'manager']) && isValidNotification(request.resource.data);
       allow delete: if hasRole(orgId, ['admin']);
     }
   }

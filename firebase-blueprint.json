@@ -134,6 +134,21 @@
         "reportedBy": { "type": "string" }
       },
       "required": ["itemId", "itemName", "quantity", "date"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A system alert or activity log for the admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["sale", "login", "logout", "system"] },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["type", "title", "message", "timestamp"]
     }
   },
   "firestore": {
@@ -164,6 +179,10 @@
     "/organizations/{orgId}/damages/{damageId}": {
       "schema": "DamageRecord",
       "description": "Records of damaged inventory items"
+    },
+    "/organizations/{orgId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System alerts and activity logs for the organization"
     },
     "/memberships/{membershipId}": {
       "schema": "Membership",
