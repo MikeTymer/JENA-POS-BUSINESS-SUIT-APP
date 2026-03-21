@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { mtnMoMoService } from './services/mtnService';
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
@@ -37,6 +38,7 @@ import {
   Download,
   Filter,
   RotateCcw,
+  RefreshCw,
   FileUp,
   AlertTriangle,
   Image as ImageIcon,
@@ -990,6 +992,13 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg }: { curren
   const handleAddStaff = async () => {
     if (!currentOrg || !newStaffEmail.trim()) return;
     
+    // Check limits
+    const limit = PLAN_LIMITS[userProfile?.plan || 'trial'].staff;
+    if (staff.length >= limit) {
+      showNotification(`Your ${userProfile?.plan} plan is limited to ${limit} staff member(s). Please upgrade to add more.`, 'error');
+      return;
+    }
+    
     const staffId = Math.random().toString(36).substring(7);
     const email = newStaffEmail.toLowerCase();
     
@@ -1519,7 +1528,7 @@ function Dashboard() {
 }
 
 function Inventory({ showNotification }: { showNotification: (m: string, t?: 'success' | 'error') => void }) {
-  const { currentOrg, user } = useFirebase();
+  const { currentOrg, user, userProfile } = useFirebase();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -1597,6 +1606,14 @@ function Inventory({ showNotification }: { showNotification: (m: string, t?: 'su
 
   const handleAddItem = async () => {
     if (!currentOrg) return;
+    
+    // Check limits
+    const limit = PLAN_LIMITS[userProfile?.plan || 'trial'].inventory;
+    if (items.length >= limit) {
+      showNotification(`Your ${userProfile?.plan} plan is limited to ${limit} inventory item(s). Please upgrade to add more.`, 'error');
+      return;
+    }
+    
     try {
       const now = new Date().toISOString();
       const id = await createDocument(`organizations/${currentOrg.id}/inventory`, {
@@ -2453,6 +2470,9 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
   const [search, setSearch] = useState('');
   const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null);
   const [amountPaid, setAmountPaid] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'MTN Mobile Money'>('Cash');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -2463,7 +2483,7 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
     );
   }, [currentOrg]);
 
-  const filteredInventory = inventory.filter(item => 
+  const filteredInventory = search.trim() === '' ? [] : inventory.filter(item => 
     item.name.toLowerCase().includes(search.toLowerCase()) || 
     item.sku.toLowerCase().includes(search.toLowerCase())
   );
@@ -2505,7 +2525,39 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
       return;
     }
 
+    setIsProcessingPayment(true);
     try {
+      if (paymentMethod === 'MTN Mobile Money') {
+        if (!phoneNumber) {
+          showNotification('Please enter an MTN phone number.', 'error');
+          setIsProcessingPayment(false);
+          return;
+        }
+
+        showNotification('Initiating MTN Mobile Money payment...', 'success');
+        const referenceId = await mtnMoMoService.requestToPay(
+          total,
+          currentOrg.currency || 'UGX',
+          phoneNumber,
+          `POS-${Date.now()}`
+        );
+
+        // Polling for status
+        let status: 'SUCCESSFUL' | 'FAILED' | 'PENDING' = 'PENDING';
+        let attempts = 0;
+        const maxAttempts = 12; // 1 minute (5s * 12)
+
+        while (status === 'PENDING' && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          status = await mtnMoMoService.getTransactionStatus(referenceId);
+          attempts++;
+        }
+
+        if (status !== 'SUCCESSFUL') {
+          throw new Error(`MTN Payment ${status === 'PENDING' ? 'timed out' : 'failed'}.`);
+        }
+      }
+
       const now = new Date().toISOString();
       // 1. Create transaction
       const txId = await createDocument(`organizations/${currentOrg.id}/transactions`, {
@@ -2515,7 +2567,9 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
         description: `POS Sale: ${cart.map(i => `${i.quantity}x ${i.item.name}`).join(', ')}`,
         date: now,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        paymentMethod: paymentMethod,
+        phoneNumber: paymentMethod === 'MTN Mobile Money' ? phoneNumber : null
       });
 
       if (!txId) throw new Error('Failed to create transaction');
@@ -2534,7 +2588,7 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
         total: total,
         amountPaid: paid,
         balance: balance,
-        paymentMethod: 'Cash',
+        paymentMethod: paymentMethod,
         date: now,
         cashierName: user?.displayName || user?.email || 'Staff',
         createdAt: now,
@@ -2566,10 +2620,11 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
 
       setCart([]);
       setAmountPaid('');
+      setPhoneNumber('');
       showNotification('Sale processed successfully!');
     } catch (error: any) {
       console.error('Checkout failed:', error);
-      let errorMessage = 'Failed to process sale.';
+      let errorMessage = error.message || 'Failed to process sale.';
       try {
         const parsed = JSON.parse(error.message);
         if (parsed.error.includes('insufficient permissions')) {
@@ -2579,6 +2634,8 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
         // Not a JSON error
       }
       showNotification(errorMessage, 'error');
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -2603,32 +2660,46 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {filteredInventory.map(item => (
-            <motion.button 
-              key={item.id}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => addToCart(item)}
-              disabled={item.quantity <= 0}
-              className={cn(
-                "bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-left space-y-2 transition-all hover:border-indigo-500/50 group relative overflow-hidden",
-                item.quantity <= 0 && "opacity-50 grayscale cursor-not-allowed"
-              )}
-            >
-              <div className="flex justify-between items-start">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{item.category}</span>
-                <span className={cn(
-                  "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                  item.quantity > 10 ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
-                )}>
-                  {item.quantity} in stock
-                </span>
-              </div>
-              <h4 className="font-bold text-zinc-100 line-clamp-1">{item.name}</h4>
-              <p className="text-lg font-black text-indigo-400">{formatCurrency(item.price, currentOrg?.currency)}</p>
-              <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/5 transition-colors" />
-            </motion.button>
-          ))}
+        <div className="flex-1 overflow-y-auto pr-2">
+          {search.trim() === '' ? (
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30 py-20">
+              <Search className="w-16 h-16" />
+              <p className="text-lg font-bold">Start typing to search products</p>
+            </div>
+          ) : filteredInventory.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30 py-20">
+              <AlertTriangle className="w-16 h-16" />
+              <p className="text-lg font-bold">No products found for "{search}"</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {filteredInventory.map(item => (
+                <motion.button 
+                  key={item.id}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => addToCart(item)}
+                  disabled={item.quantity <= 0}
+                  className={cn(
+                    "bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-left space-y-2 transition-all hover:border-indigo-500/50 group relative overflow-hidden",
+                    item.quantity <= 0 && "opacity-50 grayscale cursor-not-allowed"
+                  )}
+                >
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{item.category}</span>
+                    <span className={cn(
+                      "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                      item.quantity > 10 ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                    )}>
+                      {item.quantity} in stock
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-zinc-100 line-clamp-1">{item.name}</h4>
+                  <p className="text-lg font-black text-indigo-400">{formatCurrency(item.price, currentOrg?.currency)}</p>
+                  <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/5 transition-colors" />
+                </motion.button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2720,9 +2791,47 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
           </div>
           
           {cart.length > 0 && (
-            <div className="space-y-3 pt-2 border-t border-zinc-700/50">
+            <div className="space-y-4 pt-2 border-t border-zinc-700/50">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase">Payment Method</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['Cash', 'Card', 'MTN Mobile Money'] as const).map((method) => (
+                    <button
+                      key={method}
+                      onClick={() => {
+                        setPaymentMethod(method);
+                        if (method === 'MTN Mobile Money') setAmountPaid(total.toString());
+                      }}
+                      className={cn(
+                        "px-2 py-2 rounded-xl text-[10px] font-bold transition-all border",
+                        paymentMethod === method 
+                          ? "bg-indigo-600 border-indigo-500 text-white" 
+                          : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                      )}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {paymentMethod === 'MTN Mobile Money' && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">MTN Phone Number</label>
+                  <input 
+                    type="tel" 
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="e.g. 077XXXXXXX"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 text-sm text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+              )}
+
               <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-zinc-500 uppercase">Amount Paid</label>
+                <label className="text-xs font-bold text-zinc-500 uppercase">
+                  {paymentMethod === 'MTN Mobile Money' ? 'Amount to Charge' : 'Amount Paid'}
+                </label>
                 <div className="relative w-32">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">
                     {getCurrencySymbol(currentOrg?.currency)}
@@ -2732,19 +2841,23 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
                     value={amountPaid}
                     onChange={(e) => setAmountPaid(e.target.value)}
                     placeholder="0.00"
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg pl-8 pr-3 py-2 text-sm text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none text-right"
+                    disabled={paymentMethod === 'MTN Mobile Money'}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg pl-8 pr-3 py-2 text-sm text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none text-right disabled:opacity-50"
                   />
                 </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-zinc-500 uppercase">Balance (Change)</span>
-                <span className={cn(
-                  "text-sm font-bold",
-                  balance > 0 ? "text-emerald-500" : "text-zinc-500"
-                )}>
-                  {formatCurrency(balance, currentOrg?.currency)}
-                </span>
-              </div>
+              
+              {paymentMethod !== 'MTN Mobile Money' && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-zinc-500 uppercase">Balance (Change)</span>
+                  <span className={cn(
+                    "text-sm font-bold",
+                    balance > 0 ? "text-emerald-500" : "text-zinc-500"
+                  )}>
+                    {formatCurrency(balance, currentOrg?.currency)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -2763,11 +2876,25 @@ const POSView = ({ currentOrg, showNotification }: { currentOrg: any, showNotifi
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleCheckout}
-            disabled={cart.length === 0 || paid < total}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:grayscale text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-indigo-900/20 flex items-center justify-center gap-2"
+            disabled={cart.length === 0 || (paymentMethod !== 'MTN Mobile Money' && paid < total) || isProcessingPayment}
+            className={cn(
+              "w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:grayscale text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-indigo-900/20 flex items-center justify-center gap-2",
+              isProcessingPayment && "cursor-wait"
+            )}
           >
-            <CreditCard className="w-5 h-5" />
-            {paid < total && cart.length > 0 ? `Pay ${formatCurrency(total - paid, currentOrg?.currency)} more` : 'Checkout & Process Sale'}
+            {isProcessingPayment ? (
+              <>
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                Processing Payment...
+              </>
+            ) : (
+              <>
+                <CreditCard className="w-5 h-5" />
+                {paid < total && cart.length > 0 && paymentMethod !== 'MTN Mobile Money' 
+                  ? `Pay ${formatCurrency(total - paid, currentOrg?.currency)} more` 
+                  : 'Checkout & Process Sale'}
+              </>
+            )}
           </motion.button>
         </div>
       </div>
@@ -3077,19 +3204,19 @@ function HelpSection() {
 }
 
 const PLAN_LIMITS = {
-  trial: 1,
-  basic: 1,
-  essentials: 3,
-  plus: 10,
-  advanced: 1000
+  trial: { orgs: 1, inventory: 10, staff: 1 },
+  basic: { orgs: 1, inventory: 50, staff: 2 },
+  essentials: { orgs: 3, inventory: 200, staff: 5 },
+  plus: { orgs: 10, inventory: 1000, staff: 20 },
+  advanced: { orgs: 1000, inventory: 100000, staff: 1000 }
 };
 
 const PLAN_DETAILS = {
-  trial: { price: 0, limit: 1, label: 'Trial' },
-  basic: { price: 10500, limit: 1, label: 'Basic' },
-  essentials: { price: 31500, limit: 3, label: 'Essentials' },
-  plus: { price: 104500, limit: 10, label: 'Plus' },
-  advanced: { price: 250000, limit: 'Unlimited', label: 'Advanced' }
+  trial: { price: 0, limits: PLAN_LIMITS.trial, label: 'Trial' },
+  basic: { price: 10500, limits: PLAN_LIMITS.basic, label: 'Basic' },
+  essentials: { price: 31500, limits: PLAN_LIMITS.essentials, label: 'Essentials' },
+  plus: { price: 104500, limits: PLAN_LIMITS.plus, label: 'Plus' },
+  advanced: { price: 250000, limits: PLAN_LIMITS.advanced, label: 'Advanced' }
 };
 
 function getPlanPrice(ugxPrice: number, currency?: string) {
@@ -3164,6 +3291,27 @@ function MainApp() {
   const [isCreatingOrg, setIsCreatingOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+
+  useEffect(() => {
+    if (!currentOrg) return;
+    const unsubInv = subscribeToCollection<InventoryItem>(
+      `organizations/${currentOrg.id}/inventory`,
+      [],
+      setInventory
+    );
+    const unsubStaff = subscribeToCollection<StaffMember>(
+      `organizations/${currentOrg.id}/staff`,
+      [],
+      setStaff
+    );
+    return () => {
+      unsubInv();
+      unsubStaff();
+    };
+  }, [currentOrg]);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
@@ -3175,10 +3323,10 @@ function MainApp() {
     
     // Check limits
     const ownedOrgs = organizations.filter(o => o.ownerUid === user.uid);
-    const limit = PLAN_LIMITS[userProfile.plan || 'trial'];
+    const limit = PLAN_LIMITS[userProfile.plan || 'trial'].orgs;
     
     if (ownedOrgs.length >= limit) {
-      showNotification(`Your ${userProfile.plan} plan is limited to ${limit} business profile(s). Please upgrade to add more.`, 'error');
+      showNotification(`Only the ${limit} business profile(s) allowed for each plan is allowed. To make another business profile, one may have to subscribe to a higher package.`, 'error');
       return;
     }
 
@@ -3396,6 +3544,54 @@ function MainApp() {
             )}
             <SidebarItem icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             <SidebarItem icon={HelpCircle} label={isSidebarOpen ? "Help" : ""} active={activeTab === 'help'} onClick={() => { setActiveTab('help'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            
+            {isSidebarOpen && (
+              <div className="mt-8 px-4 py-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Plan Usage</span>
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">{currentOrg?.plan}</span>
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-medium text-zinc-400">
+                    <span>Organizations</span>
+                    <span>{organizations.length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].orgs}</span>
+                  </div>
+                  <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (organizations.length / PLAN_LIMITS[userProfile?.plan || 'trial'].orgs) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-medium text-zinc-400">
+                    <span>Inventory</span>
+                    <span>{inventory.length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].inventory}</span>
+                  </div>
+                  <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (inventory.length / PLAN_LIMITS[userProfile?.plan || 'trial'].inventory) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-medium text-zinc-400">
+                    <span>Staff</span>
+                    <span>{staff.length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].staff}</span>
+                  </div>
+                  <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (staff.length / PLAN_LIMITS[userProfile?.plan || 'trial'].staff) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </nav>
 
           <div className="pt-4 border-t border-zinc-800 space-y-2">
@@ -3551,7 +3747,7 @@ function MainApp() {
                     <div className="flex justify-between items-end">
                       <label className="text-xs font-bold text-zinc-500 uppercase">Account Subscription</label>
                       <span className="text-xs font-bold text-indigo-400">
-                        {organizations.filter(o => o.ownerUid === user?.uid).length} / {PLAN_LIMITS[userProfile?.plan || 'trial']} Businesses Used
+                        {organizations.filter(o => o.ownerUid === user?.uid).length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].orgs} Businesses Used
                       </span>
                     </div>
 
@@ -3576,7 +3772,7 @@ function MainApp() {
                           )}
                           <p className="text-sm font-bold text-zinc-100 uppercase">{details.label}</p>
                           <p className="text-xs text-zinc-500 mt-1">
-                            {getPlanPrice(details.price as number, currentOrg?.currency)} • {details.limit} {typeof details.limit === 'number' ? 'Businesses' : ''}
+                            {getPlanPrice(details.price as number, currentOrg?.currency)} • {details.limits.orgs} Businesses
                           </p>
                         </div>
                       ))}
