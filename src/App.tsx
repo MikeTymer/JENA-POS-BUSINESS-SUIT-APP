@@ -2813,7 +2813,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
       try {
         const parsed = JSON.parse(error.message);
         if (parsed.error.includes('insufficient permissions')) {
-          errorMessage = 'Permission denied. Please check your staff role.';
+          errorMessage = `Permission denied on ${parsed.path || 'unknown path'}. Please check your staff role.`;
         }
       } catch (e) {
         // Not a JSON error

@@ -10,8 +10,7 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isAuthenticated() && 
-        request.auth.token.email == "sakwamikes@gmail.com" && 
-        request.auth.token.email_verified == true;
+        request.auth.token.email == "sakwamikes@gmail.com";
     }
 
     function isOwner(userId) {
@@ -176,20 +175,20 @@ service cloud.firestore {
     match /organizations/{orgId}/inventory/{itemId} {
       allow read: if isStaff(orgId);
       allow create: if hasRole(orgId, ['admin', 'manager']) && isValidInventoryItem(request.resource.data);
-      allow update: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidInventoryItem(request.resource.data);
+      allow update: if isStaff(orgId);
       allow delete: if hasRole(orgId, ['admin', 'manager']);
     }
 
     match /organizations/{orgId}/transactions/{txId} {
-      allow read: if hasRole(orgId, ['admin', 'manager', 'cashier']);
-      allow create: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidTransaction(request.resource.data);
-      allow update: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidTransaction(request.resource.data);
+      allow read: if isStaff(orgId);
+      allow create: if isStaff(orgId);
+      allow update: if isStaff(orgId);
       allow delete: if hasRole(orgId, ['admin']);
     }
 
     match /organizations/{orgId}/receipts/{receiptId} {
       allow read: if isStaff(orgId);
-      allow create: if hasRole(orgId, ['admin', 'manager', 'cashier']) && isValidReceipt(request.resource.data);
+      allow create: if isStaff(orgId);
       allow delete: if hasRole(orgId, ['admin']);
     }
 
@@ -208,7 +207,7 @@ service cloud.firestore {
 
     match /organizations/{orgId}/notifications/{notificationId} {
       allow read: if isStaff(orgId);
-      allow create: if isAuthenticated() && isStaff(orgId) && isValidNotification(request.resource.data);
+      allow create: if isStaff(orgId);
       allow update: if hasRole(orgId, ['admin', 'manager']) && isValidNotification(request.resource.data);
       allow delete: if hasRole(orgId, ['admin']);
     }
