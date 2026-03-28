@@ -50,7 +50,9 @@ import {
   MapPin,
   Hash,
   Bell,
-  Clock
+  Clock,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -2138,13 +2140,13 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
                             setEditingItem(item);
                             setIsEditing(true);
                           }}
-                          className="p-2 text-zinc-500 hover:text-zinc-200 transition-colors"
+                          className="p-2 text-blue-500"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                       )}
                       {isManager && (
-                        <button onClick={() => handleDelete(item)} className="p-2 text-zinc-500 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => handleDelete(item)} className="p-2 text-blue-500"><Trash2 className="w-4 h-4" /></button>
                       )}
                     </div>
                   </td>
@@ -3095,9 +3097,11 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [newDamage, setNewDamage] = useState({ itemId: '', quantity: 1, reason: '', imageUrl: '' });
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingDamage, setEditingDamage] = useState<DamageRecord | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
     const file = e.target.files?.[0];
     if (!file || !currentOrg) return;
 
@@ -3106,7 +3110,11 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
       const storageRef = ref(storage, `organizations/${currentOrg.id}/damages/${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      setNewDamage(prev => ({ ...prev, imageUrl: url }));
+      if (isEdit && editingDamage) {
+        setEditingDamage({ ...editingDamage, imageUrl: url });
+      } else {
+        setNewDamage(prev => ({ ...prev, imageUrl: url }));
+      }
       showNotification('Image uploaded successfully!');
     } catch (error) {
       console.error('Upload error:', error);
@@ -3168,6 +3176,55 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
     }
   };
 
+  const handleDeleteDamage = async (damage: DamageRecord) => {
+    if (!currentOrg) return;
+    try {
+      const item = inventory.find(i => i.id === damage.itemId);
+      if (item) {
+        await updateDocument(`organizations/${currentOrg.id}/inventory`, item.id, {
+          quantity: item.quantity + damage.quantity,
+          updatedAt: new Date().toISOString()
+        });
+      }
+      await removeDocument(`organizations/${currentOrg.id}/damages`, damage.id);
+      showNotification('Damage record deleted and stock restored!');
+    } catch (error) {
+      showNotification('Failed to delete damage record.', 'error');
+    }
+  };
+
+  const handleUpdateDamage = async () => {
+    if (!currentOrg || !editingDamage) return;
+    try {
+      const originalDamage = damages.find(d => d.id === editingDamage.id);
+      if (!originalDamage) return;
+
+      const item = inventory.find(i => i.id === editingDamage.itemId);
+      if (item) {
+        const qtyDiff = editingDamage.quantity - originalDamage.quantity;
+        if (item.quantity < qtyDiff) {
+          showNotification('Not enough stock to update this damage.', 'error');
+          return;
+        }
+        await updateDocument(`organizations/${currentOrg.id}/inventory`, item.id, {
+          quantity: item.quantity - qtyDiff,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      const { id, ...data } = editingDamage;
+      await updateDocument(`organizations/${currentOrg.id}/damages`, id, {
+        ...data,
+        updatedAt: new Date().toISOString()
+      });
+      setIsEditing(false);
+      setEditingDamage(null);
+      showNotification('Damage record updated!');
+    } catch (error) {
+      showNotification('Failed to update damage record.', 'error');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -3183,8 +3240,8 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
         </button>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-x-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse min-w-[800px]">
           <thead>
             <tr className="bg-zinc-800/50 border-b border-zinc-800">
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Item</th>
@@ -3192,11 +3249,12 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Reason</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Evidence</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Date</th>
+              <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {damages.map((damage) => (
-              <tr key={damage.id} className="hover:bg-zinc-800/30 transition-colors">
+              <tr key={damage.id} className="hover:bg-zinc-800/30 transition-colors group">
                 <td className="px-6 py-4 text-sm font-medium text-zinc-100">{damage.itemName}</td>
                 <td className="px-6 py-4 text-sm text-rose-400 font-mono">-{damage.quantity}</td>
                 <td className="px-6 py-4 text-sm text-zinc-400">{damage.reason || 'No reason provided'}</td>
@@ -3210,11 +3268,34 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
                   )}
                 </td>
                 <td className="px-6 py-4 text-sm text-zinc-500">{new Date(damage.date).toLocaleString()}</td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {isCashier && (
+                      <button 
+                        onClick={() => {
+                          setEditingDamage(damage);
+                          setIsEditing(true);
+                        }}
+                        className="p-2 text-blue-500"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button 
+                        onClick={() => handleDeleteDamage(damage)}
+                        className="p-2 text-blue-500"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
             {damages.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-12 text-center text-zinc-500">No damage records found.</td>
+                <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">No damage records found.</td>
               </tr>
             )}
           </tbody>
@@ -3308,6 +3389,93 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
                 className="w-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition-colors"
               >
                 Record Damage & Reduce Stock
+              </button>
+            </motion.div>
+          </div>
+        )}
+
+        {isEditing && editingDamage && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-lg w-full space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-zinc-100">Edit Damage Record</h3>
+                <button onClick={() => { setIsEditing(false); setEditingDamage(null); }} className="text-zinc-500 hover:text-zinc-200"><X className="w-6 h-6" /></button>
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Item</label>
+                  <input 
+                    type="text" 
+                    value={editingDamage.itemName}
+                    disabled
+                    className="w-full bg-zinc-800/50 border border-zinc-800 rounded-xl px-4 py-2 text-zinc-500 cursor-not-allowed outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Quantity Damaged</label>
+                  <input 
+                    type="number" 
+                    min="1"
+                    value={editingDamage.quantity}
+                    onChange={(e) => setEditingDamage({...editingDamage, quantity: Number(e.target.value)})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-rose-500 outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Reason / Description</label>
+                  <textarea 
+                    value={editingDamage.reason}
+                    onChange={(e) => setEditingDamage({...editingDamage, reason: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-rose-500 outline-none h-24 resize-none"
+                    placeholder="Describe the damage..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Evidence (Photo)</label>
+                  <label className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700 rounded-2xl hover:border-indigo-500 hover:bg-indigo-500/5 transition-all cursor-pointer group">
+                    {uploading ? (
+                      <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                    ) : editingDamage.imageUrl ? (
+                      <div className="relative w-full aspect-video rounded-lg overflow-hidden">
+                        <img src={editingDamage.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <FileUp className="w-6 h-6 text-white" />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center group-hover:bg-indigo-500/20 transition-colors">
+                          <Camera className="w-5 h-5 text-zinc-400 group-hover:text-indigo-400" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-zinc-300">Take Photo or Upload</p>
+                          <p className="text-xs text-zinc-500">Tap to use camera or select file</p>
+                        </div>
+                      </>
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="environment" 
+                      onChange={(e) => handleFileUpload(e, true)}
+                      className="hidden" 
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
+              </div>
+              <button 
+                onClick={handleUpdateDamage}
+                disabled={editingDamage.quantity <= 0}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition-colors"
+              >
+                Update Damage Record
               </button>
             </motion.div>
           </div>
@@ -3851,7 +4019,7 @@ function ProfitAnalytics() {
   );
 }
 
-function MainApp() {
+function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: 'light' | 'dark') => void }) {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'transactions' | 'reports' | 'settings' | 'pos' | 'admin' | 'damages' | 'help' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics'>('dashboard');
   const [showHelpReminder, setShowHelpReminder] = useState(true);
@@ -4626,6 +4794,32 @@ function MainApp() {
 
                 <h2 className="text-2xl font-bold text-zinc-100">User Profile Settings</h2>
                 <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-6">
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-zinc-500 uppercase">Appearance</label>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => setTheme('light')}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all",
+                          theme === 'light' ? "bg-white text-zinc-950 border-indigo-600 shadow-lg" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"
+                        )}
+                      >
+                        <Sun className="w-4 h-4" />
+                        <span className="text-sm font-bold">Light Mode</span>
+                      </button>
+                      <button 
+                        onClick={() => setTheme('dark')}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all",
+                          theme === 'dark' ? "bg-zinc-800 text-white border-indigo-600 shadow-lg" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"
+                        )}
+                      >
+                        <Moon className="w-4 h-4" />
+                        <span className="text-sm font-bold">Dark Mode</span>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-zinc-500 uppercase">Display Name</label>
@@ -4819,6 +5013,21 @@ function AuthScreen() {
 
 function AppContent() {
   const { user, loading, isAuthReady } = useFirebase();
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('jena-pos-theme');
+    return (saved as 'light' | 'dark') || 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('jena-pos-theme', theme);
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    }
+  }, [theme]);
 
   if (!isAuthReady || loading) {
     return (
@@ -4828,7 +5037,7 @@ function AppContent() {
     );
   }
 
-  return user ? <MainApp /> : <AuthScreen />;
+  return user ? <MainApp theme={theme} setTheme={setTheme} /> : <AuthScreen />;
 }
 
 export default function App() {
