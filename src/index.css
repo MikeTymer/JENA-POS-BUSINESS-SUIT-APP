@@ -15,28 +15,26 @@
 }
 
 .light {
-  --color-zinc-950: #f8fafc;
-  --color-zinc-900: #f1f5f9;
-  --color-zinc-800: #e2e8f0;
-  --color-zinc-700: #cbd5e1;
+  /* Backgrounds - Soft Blue-Gray to reduce eye strain */
+  --color-zinc-950: #f1f5f9; /* Main background - Slate 100 */
+  --color-zinc-900: #ffffff; /* Card background - White */
+  --color-zinc-800: #e2e8f0; /* Borders - Slate 200 */
+  
+  /* Text - Deep Navy Blue */
+  --color-zinc-100: #0f172a; /* Primary text - Slate 900 */
+  --color-zinc-200: #1e293b; /* Secondary text - Slate 800 */
+  --color-zinc-300: #334155; /* Muted text - Slate 700 */
+  --color-zinc-400: #475569; /* Very muted text - Slate 600 */
+  --color-zinc-500: #64748b; /* Subtext - Slate 500 */
+  
+  /* Other mappings */
   --color-zinc-600: #94a3b8;
-  --color-zinc-500: #64748b;
-  --color-zinc-400: #475569;
-  --color-zinc-300: #334155;
-  --color-zinc-200: #1e293b;
-  --color-zinc-100: #0f172a;
+  --color-zinc-700: #cbd5e1;
   --color-zinc-50: #020617;
   
-  /* Invert text colors */
-  --color-zinc-100: #0f172a; /* text-zinc-100 becomes dark */
-  --color-zinc-200: #1e293b;
-  --color-zinc-300: #334155;
-  --color-zinc-400: #475569;
-  
-  /* Invert background colors */
-  --color-zinc-950: #ffffff; /* bg-zinc-950 becomes white */
-  --color-zinc-900: #f8fafc;
-  --color-zinc-800: #f1f5f9;
+  /* Scrollbar override for light mode */
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-hover: #94a3b8;
 }
 
 @layer base {
@@ -48,11 +46,11 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #27272a;
+    background: var(--scrollbar-thumb, #27272a);
     border-radius: 10px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #3f3f46;
+    background: var(--scrollbar-hover, #3f3f46);
   }
 }
 

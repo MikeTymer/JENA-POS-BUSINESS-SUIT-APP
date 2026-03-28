@@ -188,14 +188,16 @@ const Notification = ({ message, type, onClose }: { message: string, type: 'succ
   </motion.div>
 );
 
-const SidebarItem = ({ icon: Icon, label, active, onClick }: any) => (
+const SidebarItem = ({ icon: Icon, label, active, onClick, theme }: any) => (
   <button
     onClick={onClick}
     className={cn(
       "flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200",
       active 
         ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/20" 
-        : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+        : theme === 'dark'
+          ? "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          : "text-slate-400 hover:bg-slate-800 hover:text-white"
     )}
   >
     <Icon className="w-5 h-5" />
@@ -4349,7 +4351,10 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed lg:static inset-y-0 left-0 z-40 bg-zinc-900 border-r border-zinc-800 transition-all duration-300 overflow-y-auto lg:overflow-visible custom-scrollbar",
+        "fixed lg:static inset-y-0 left-0 z-40 transition-all duration-300 overflow-y-auto lg:overflow-visible custom-scrollbar",
+        theme === 'dark' 
+          ? "bg-zinc-900 border-r border-zinc-800" 
+          : "bg-[#0f172a] border-r border-slate-800",
         isSidebarOpen ? "w-64 translate-x-0 pointer-events-auto" : "w-0 lg:w-20 -translate-x-full lg:translate-x-0 pointer-events-none lg:pointer-events-auto"
       )}>
         <div className="h-full flex flex-col p-4">
@@ -4368,17 +4373,17 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
           </div>
 
           <nav className="flex-1 space-y-2">
-            <SidebarItem icon={LayoutDashboard} label={isSidebarOpen ? "Dashboard" : ""} active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem icon={Store} label={isSidebarOpen ? "POS" : ""} active={activeTab === 'pos'} onClick={() => { setActiveTab('pos'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem icon={Package} label={isSidebarOpen ? "Inventory" : ""} active={activeTab === 'inventory'} onClick={() => { setActiveTab('inventory'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem icon={AlertTriangle} label={isSidebarOpen ? "Damages" : ""} active={activeTab === 'damages'} onClick={() => { setActiveTab('damages'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem icon={Receipt} label={isSidebarOpen ? "Transactions" : ""} active={activeTab === 'transactions'} onClick={() => { setActiveTab('transactions'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem icon={BarChart3} label={isSidebarOpen ? "Reports" : ""} active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            <SidebarItem theme={theme} icon={LayoutDashboard} label={isSidebarOpen ? "Dashboard" : ""} active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            <SidebarItem theme={theme} icon={Store} label={isSidebarOpen ? "POS" : ""} active={activeTab === 'pos'} onClick={() => { setActiveTab('pos'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            <SidebarItem theme={theme} icon={Package} label={isSidebarOpen ? "Inventory" : ""} active={activeTab === 'inventory'} onClick={() => { setActiveTab('inventory'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            <SidebarItem theme={theme} icon={AlertTriangle} label={isSidebarOpen ? "Damages" : ""} active={activeTab === 'damages'} onClick={() => { setActiveTab('damages'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            <SidebarItem theme={theme} icon={Receipt} label={isSidebarOpen ? "Transactions" : ""} active={activeTab === 'transactions'} onClick={() => { setActiveTab('transactions'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            <SidebarItem theme={theme} icon={BarChart3} label={isSidebarOpen ? "Reports" : ""} active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             {isAdmin && (
-              <SidebarItem icon={ShieldCheck} label={isSidebarOpen ? "Admin" : ""} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+              <SidebarItem theme={theme} icon={ShieldCheck} label={isSidebarOpen ? "Admin" : ""} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             )}
-            <SidebarItem icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem icon={HelpCircle} label={isSidebarOpen ? "Help" : ""} active={activeTab === 'help'} onClick={() => { setActiveTab('help'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            <SidebarItem theme={theme} icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            <SidebarItem theme={theme} icon={HelpCircle} label={isSidebarOpen ? "Help" : ""} active={activeTab === 'help'} onClick={() => { setActiveTab('help'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             
             {isSidebarOpen && (
               <div 
@@ -4446,17 +4451,31 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-zinc-950/50 backdrop-blur-md border-b border-zinc-800 px-6 flex items-center justify-between sticky top-0 z-30">
+        <header className={cn(
+          "h-16 backdrop-blur-md border-b px-6 flex items-center justify-between sticky top-0 z-30",
+          theme === 'dark'
+            ? "bg-zinc-950/50 border-zinc-800"
+            : "bg-[#0f172a]/90 border-slate-800 text-white"
+        )}>
           <div className="flex items-center gap-4">
-            <button onClick={() => setIsSidebarOpen(prev => !prev)} className="p-2 text-zinc-400 hover:bg-zinc-800 rounded-lg">
+            <button onClick={() => setIsSidebarOpen(prev => !prev)} className={cn(
+              "p-2 rounded-lg",
+              theme === 'dark' ? "text-zinc-400 hover:bg-zinc-800" : "text-slate-400 hover:bg-slate-800"
+            )}>
               <Menu className="w-6 h-6" />
             </button>
-            <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl">
+            <div className={cn(
+              "flex items-center gap-2 border px-3 py-1.5 rounded-xl",
+              theme === 'dark' ? "bg-zinc-900 border-zinc-800" : "bg-slate-800 border-slate-700"
+            )}>
               <Building2 className="w-4 h-4 text-indigo-500" />
               <select 
                 value={currentOrg?.id}
                 onChange={(e) => setCurrentOrg(organizations.find(o => o.id === e.target.value) || null)}
-                className="bg-transparent text-sm font-bold text-zinc-200 outline-none cursor-pointer"
+                className={cn(
+                  "bg-transparent text-sm font-bold outline-none cursor-pointer",
+                  theme === 'dark' ? "text-zinc-200" : "text-white"
+                )}
               >
                 {organizations.map(org => (
                   <option key={org.id} value={org.id}>{org.name}</option>
@@ -4469,7 +4488,12 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             <div className="relative">
               <button 
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-indigo-500 hover:border-indigo-500/50 transition-all relative"
+                className={cn(
+                  "w-10 h-10 rounded-xl border flex items-center justify-center transition-all relative",
+                  theme === 'dark' 
+                    ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-indigo-500 hover:border-indigo-500/50" 
+                    : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-indigo-400"
+                )}
               >
                 <Bell className="w-5 h-5" />
                 {notifications.filter(n => !n.read).length > 0 && (
