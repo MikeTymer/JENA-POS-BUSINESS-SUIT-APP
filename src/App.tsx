@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { mtnMoMoService } from './services/mtnService';
 import { 
   signInWithPopup, 
+  signInWithRedirect,
   GoogleAuthProvider, 
   signOut 
 } from 'firebase/auth';
@@ -4698,14 +4699,29 @@ function MainApp() {
 
 function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = async () => {
+  const handleLogin = async (useRedirect = false) => {
     setIsLoading(true);
+    setError(null);
     try {
       const provider = new GoogleAuthProvider();
+      // Force account selection to ensure the popup is triggered correctly
+      provider.setCustomParameters({ prompt: 'select_account' });
+
+      if (useRedirect) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
       await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login failed:", error);
+    } catch (err: any) {
+      console.error("Login failed:", err);
+      if (err.code === 'auth/popup-blocked') {
+        setError("Your browser blocked the login window. Please allow pop-ups for this site or try the 'Redirect' method below.");
+      } else {
+        setError(err.message || "An unexpected error occurred during login.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -4734,18 +4750,35 @@ function AuthScreen() {
             <p className="text-sm text-zinc-500">Sign in with your Google account to access all your business organizations.</p>
           </div>
           
-          <button 
-            onClick={handleLogin}
-            disabled={isLoading}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-zinc-100 text-zinc-950 font-bold py-4 rounded-2xl transition-all shadow-xl disabled:opacity-50"
-          >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-              <>
-                <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-                Continue with Google
-              </>
-            )}
-          </button>
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-4 rounded-xl text-left flex gap-3">
+              <div className="flex-shrink-0 mt-0.5">⚠️</div>
+              <p>{error}</p>
+            </div>
+          )}
+          
+          <div className="space-y-3">
+            <button 
+              onClick={() => handleLogin(false)}
+              disabled={isLoading}
+              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-zinc-100 text-zinc-950 font-bold py-4 rounded-2xl transition-all shadow-xl disabled:opacity-50"
+            >
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                <>
+                  <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+                  Continue with Google
+                </>
+              )}
+            </button>
+
+            <button 
+              onClick={() => handleLogin(true)}
+              disabled={isLoading}
+              className="w-full text-zinc-500 hover:text-zinc-300 text-xs font-medium py-2 transition-colors"
+            >
+              Trouble with pop-ups? Try Redirect Mode
+            </button>
+          </div>
 
           <div className="pt-4 flex items-center justify-center gap-6 text-zinc-600">
             <div className="flex flex-col items-center gap-1">
