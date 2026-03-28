@@ -1183,7 +1183,7 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
                           <h3 className="text-xl font-bold text-zinc-100">{org.name}</h3>
                           <button 
                             onClick={() => { setEditingOrgId(org.id); setEditingOrgName(org.name); }}
-                            className="p-1 text-zinc-500 hover:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="p-1 text-blue-500"
                           >
                             <Edit2 className="w-3 h-3" />
                           </button>
@@ -2135,7 +2135,7 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
                   <td className="px-6 py-4 text-sm font-medium text-zinc-100">{formatCurrency(item.price, currentOrg?.currency)}</td>
                   <td className="px-6 py-4 text-sm text-zinc-400">{formatCurrency(item.cost, currentOrg?.currency)}</td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2">
                       {isCashier && (
                         <button 
                           onClick={() => {
@@ -3271,7 +3271,7 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
                 </td>
                 <td className="px-6 py-4 text-sm text-zinc-500">{new Date(damage.date).toLocaleString()}</td>
                 <td className="px-6 py-4">
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-2">
                     {isCashier && (
                       <button 
                         onClick={() => {
