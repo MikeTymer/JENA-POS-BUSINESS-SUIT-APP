@@ -41,6 +41,7 @@ import {
   RotateCcw,
   RefreshCw,
   FileUp,
+  FileDown,
   AlertTriangle,
   Image as ImageIcon,
   Camera,
@@ -52,7 +53,9 @@ import {
   Bell,
   Clock,
   Sun,
-  Moon
+  Moon,
+  Github,
+  Code2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -107,6 +110,7 @@ interface DamageRecord {
   itemId: string;
   itemName: string;
   quantity: number;
+  cost: number;
   reason: string;
   imageUrl?: string;
   date: string;
@@ -510,8 +514,9 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
 function Reports({ isManager }: { isManager: boolean }) {
   const { currentOrg } = useFirebase();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [receipts, setReceipts] = useState<ReceiptData[]>([]);
-  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [damages, setDamages] = useState<DamageRecord[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'balance_sheet' | 'income_statement' | 'cash_flow' | 'equity_statement'>('overview');
   const [period, setPeriod] = useState<'7' | '30' | '90' | 'all'>('30');
 
   useEffect(() => {
@@ -521,15 +526,20 @@ function Reports({ isManager }: { isManager: boolean }) {
       [],
       setTransactions
     );
-    const unsubRc = subscribeToCollection<ReceiptData>(
-      `organizations/${currentOrg.id}/receipts`,
+    const unsubInv = subscribeToCollection<InventoryItem>(
+      `organizations/${currentOrg.id}/inventory`,
       [],
-      setReceipts
+      setInventory
     );
-    return () => { unsubTx(); unsubRc(); };
+    const unsubDmg = subscribeToCollection<DamageRecord>(
+      `organizations/${currentOrg.id}/damages`,
+      [],
+      setDamages
+    );
+    return () => { unsubTx(); unsubInv(); unsubDmg(); };
   }, [currentOrg]);
 
-  const analysis = useMemo(() => {
+  const financialData = useMemo(() => {
     const now = new Date();
     const filteredTransactions = transactions.filter(tx => {
       if (period === 'all') return true;
@@ -539,413 +549,684 @@ function Reports({ isManager }: { isManager: boolean }) {
       return diffDays <= parseInt(period);
     });
 
+    // --- Income Statement Calculations ---
+    let revenue = 0;
+    let cogs = 0;
+    let operatingExpenses = 0;
     const incomeByCategory: Record<string, number> = {};
     const expenseByCategory: Record<string, number> = {};
-    const hourlyIncome: Record<number, number> = {};
-    const weeklyProgress: Record<string, { income: number, expense: number }> = {};
+
+    filteredTransactions.forEach(tx => {
+      if (tx.type === 'income') {
+        revenue += tx.amount;
+        incomeByCategory[tx.category] = (incomeByCategory[tx.category] || 0) + tx.amount;
+        if (tx.items) {
+          tx.items.forEach(item => {
+            cogs += (item.cost || 0) * item.quantity;
+          });
+        }
+      } else {
+        operatingExpenses += tx.amount;
+        expenseByCategory[tx.category] = (expenseByCategory[tx.category] || 0) + tx.amount;
+      }
+    });
+
+    const filteredDamages = damages.filter(d => {
+      if (period === 'all') return true;
+      const dDate = new Date(d.date);
+      const diffTime = Math.abs(now.getTime() - dDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays <= parseInt(period);
+    });
+
+    const damageLosses = filteredDamages.reduce((acc, d) => {
+      const cost = d.cost || inventory.find(i => i.id === d.itemId)?.cost || 0;
+      return acc + (cost * d.quantity);
+    }, 0);
+
+    const totalOperatingExpenses = operatingExpenses + damageLosses;
+    const grossProfit = revenue - cogs;
+    const operatingIncome = grossProfit - totalOperatingExpenses;
+    const netIncome = operatingIncome; // Assuming no tax/interest for now
+
+    // --- Balance Sheet Calculations ---
+    const inventoryValue = inventory.reduce((acc, item) => acc + (item.quantity * item.cost), 0);
+    const cashBalance = transactions.reduce((acc, tx) => tx.type === 'income' ? acc + tx.amount : acc - tx.amount, 0);
     
-    let totalIncome = 0;
-    let totalExpense = 0;
+    const assets = {
+      current: {
+        cash: cashBalance,
+        inventory: inventoryValue,
+        accountsReceivable: 0 // Placeholder
+      },
+      nonCurrent: {
+        equipment: 0, // Placeholder
+        property: 0 // Placeholder
+      }
+    };
+    const totalAssets = assets.current.cash + assets.current.inventory + assets.current.accountsReceivable + assets.nonCurrent.equipment + assets.nonCurrent.property;
 
-    // Initialize hourly data
+    const liabilities = {
+      current: {
+        accountsPayable: 0, // Placeholder
+        shortTermLoans: 0 // Placeholder
+      },
+      nonCurrent: {
+        longTermDebt: 0 // Placeholder
+      }
+    };
+    const totalLiabilities = liabilities.current.accountsPayable + liabilities.current.shortTermLoans + liabilities.nonCurrent.longTermDebt;
+
+    const equity = totalAssets - totalLiabilities;
+
+    // --- Cash Flow Statement Calculations ---
+    const cashFlow = {
+      operating: {
+        netIncome,
+        adjustments: damageLosses, // Damages are non-cash expenses
+        changesInWorkingCapital: -inventoryValue // Inventory increase is a cash outflow
+      },
+      investing: {
+        assetPurchases: 0 // Placeholder
+      },
+      financing: {
+        capitalInjection: 0, // Placeholder
+        dividends: 0 // Placeholder
+      }
+    };
+    const netCashFlow = (cashFlow.operating.netIncome + cashFlow.operating.adjustments + cashFlow.operating.changesInWorkingCapital) +
+                        cashFlow.investing.assetPurchases +
+                        (cashFlow.financing.capitalInjection - cashFlow.financing.dividends);
+
+    // --- Charts Data ---
+    const hourlyIncome: Record<number, number> = {};
+    const periodProgress: Record<string, { income: number, expense: number }> = {};
     for (let i = 0; i < 24; i++) hourlyIncome[i] = 0;
-
-    // Initialize weekly data (last 7 days)
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
+    
+    const periodDays = period === 'all' ? 365 : parseInt(period);
+    const periodDates = Array.from({ length: periodDays }, (_, i) => {
       const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
+      d.setDate(d.getDate() - (periodDays - 1 - i));
       return d.toISOString().split('T')[0];
     });
-    last7Days.forEach(day => weeklyProgress[day] = { income: 0, expense: 0 });
+    
+    periodDates.forEach(day => periodProgress[day] = { income: 0, expense: 0 });
 
     filteredTransactions.forEach(tx => {
       const txDate = new Date(tx.date);
       const dayKey = tx.date.split('T')[0];
       const hour = txDate.getHours();
-
       if (tx.type === 'income') {
-        incomeByCategory[tx.category] = (incomeByCategory[tx.category] || 0) + tx.amount;
-        totalIncome += tx.amount;
         hourlyIncome[hour] += tx.amount;
-        if (weeklyProgress[dayKey]) weeklyProgress[dayKey].income += tx.amount;
+        if (periodProgress[dayKey]) periodProgress[dayKey].income += tx.amount;
       } else {
-        expenseByCategory[tx.category] = (expenseByCategory[tx.category] || 0) + tx.amount;
-        totalExpense += tx.amount;
-        if (weeklyProgress[dayKey]) weeklyProgress[dayKey].expense += tx.amount;
+        if (periodProgress[dayKey]) periodProgress[dayKey].expense += tx.amount;
       }
+    });
+
+    filteredDamages.forEach(d => {
+      const dayKey = d.date.split('T')[0];
+      const cost = d.cost || inventory.find(i => i.id === d.itemId)?.cost || 0;
+      if (periodProgress[dayKey]) periodProgress[dayKey].expense += (cost * d.quantity);
     });
 
     const incomeData = Object.entries(incomeByCategory).map(([name, value]) => ({ name, value }));
     const expenseData = Object.entries(expenseByCategory).map(([name, value]) => ({ name, value }));
-    
     const hourlyData = Object.entries(hourlyIncome).map(([hour, amount]) => ({
       hour: `${hour.padStart(2, '0')}:00`,
       amount
     }));
-
-    const weeklyData = last7Days.map(day => {
+    
+    const performanceData = periodDates.map(day => {
       const date = new Date(day);
+      let label = '';
+      if (period === '7') {
+        label = date.toLocaleDateString('en-US', { weekday: 'short' });
+      } else if (period === '30' || period === '90') {
+        label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } else {
+        label = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      }
+      
       return {
-        day: date.toLocaleDateString('en-US', { weekday: 'short' }),
-        income: weeklyProgress[day].income,
-        expense: weeklyProgress[day].expense,
+        label,
+        income: periodProgress[day].income,
+        expense: periodProgress[day].expense,
         fullDate: day
       };
     });
 
-    // Find peak hour
-    const peakHour = Object.entries(hourlyIncome).reduce((a, b) => a[1] > b[1] ? a : b);
-    
-    // Find best day
-    const bestDay = weeklyData.reduce((a, b) => a.income > b.income ? a : b);
+    // If period is long, we might want to downsample or group by month for 'all'
+    let finalPerformanceData = performanceData;
+    if (period === 'all') {
+      const monthlyData: Record<string, { income: number, expense: number }> = {};
+      performanceData.forEach(d => {
+        const monthKey = d.fullDate.substring(0, 7); // YYYY-MM
+        if (!monthlyData[monthKey]) monthlyData[monthKey] = { income: 0, expense: 0 };
+        monthlyData[monthKey].income += d.income;
+        monthlyData[monthKey].expense += d.expense;
+      });
+      finalPerformanceData = Object.entries(monthlyData).map(([key, val]) => {
+        const [y, m] = key.split('-');
+        const date = new Date(parseInt(y), parseInt(m) - 1);
+        return {
+          label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+          income: val.income,
+          expense: val.expense,
+          fullDate: key
+        };
+      }).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+    }
 
-    return { 
-      incomeData, 
-      expenseData, 
-      totalIncome, 
-      totalExpense, 
-      hourlyData, 
-      weeklyData,
-      peakHour: `${peakHour[0].padStart(2, '0')}:00`,
-      bestDay: bestDay.day
+    return {
+      incomeStatement: { revenue, cogs, grossProfit, operatingExpenses, damageLosses, totalOperatingExpenses, operatingIncome, netIncome, incomeByCategory, expenseByCategory },
+      balanceSheet: { assets, totalAssets, liabilities, totalLiabilities, equity },
+      cashFlow: { ...cashFlow, netCashFlow },
+      charts: { incomeData, expenseData, hourlyData, performanceData: finalPerformanceData, totalIncome: revenue, totalExpense: operatingExpenses }
     };
-  }, [transactions, period]);
+  }, [transactions, inventory, damages, period]);
 
   const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
   const downloadReportPDF = () => {
     const doc = new jsPDF();
+    const dateStr = new Date().toLocaleDateString();
     
-    doc.setFontSize(20);
-    doc.text(`${currentOrg?.name || 'Business'} Financial Report`, 14, 22);
+    doc.setFontSize(22);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${currentOrg?.name || 'Business'} Financial Report`, 105, 20, { align: 'center' });
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    let currentY = 28;
-    if (currentOrg?.address) {
-      doc.text(currentOrg.address, 14, currentY);
-      currentY += 5;
-    }
-    if (currentOrg?.uprsRegistrationNumber) {
-      doc.text(`UPRS REG: ${currentOrg.uprsRegistrationNumber}`, 14, currentY);
-      currentY += 5;
-    }
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: 'center' });
+    doc.text(`Reporting Period: ${period === 'all' ? 'All Time' : `Last ${period} Days`}`, 105, 34, { align: 'center' });
 
-    doc.setFontSize(11);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, currentY + 5);
-    doc.text(`Period: ${period === 'all' ? 'All Time' : `Last ${period} Days`}`, 14, currentY + 12);
+    let currentY = 45;
 
-    // Summary Section
-    doc.setFontSize(14);
-    doc.setTextColor(0);
-    doc.text('Performance Summary', 14, currentY + 23);
-    
-    autoTable(doc, {
-      startY: currentY + 27,
-      head: [['Metric', 'Value']],
-      body: [
-        ['Total Revenue', formatCurrency(analysis.totalIncome, currentOrg?.currency)],
-        ['Total Expenses', formatCurrency(analysis.totalExpense, currentOrg?.currency)],
-        ['Net Profit', formatCurrency(analysis.totalIncome - analysis.totalExpense, currentOrg?.currency)],
-        ['Peak Sales Hour', analysis.peakHour],
-        ['Best Performing Day', analysis.bestDay]
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [79, 70, 229] }
-    });
+    const addSection = (title: string, data: any[][], headers: string[]) => {
+      doc.setFontSize(16);
+      doc.setTextColor(15, 23, 42);
+      doc.text(title, 14, currentY);
+      autoTable(doc, {
+        startY: currentY + 5,
+        head: [headers],
+        body: data,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 23, 42] },
+        margin: { bottom: 20 }
+      });
+      currentY = (doc as any).lastAutoTable.finalY + 15;
+    };
 
-    // Weekly Progress
-    const finalY = (doc as any).lastAutoTable.finalY || 52;
-    doc.setFontSize(14);
-    doc.text('Weekly Progress (Last 7 Days)', 14, finalY + 15);
+    // Income Statement
+    const is = financialData.incomeStatement;
+    addSection('Income Statement', [
+      ['Revenue', formatCurrency(is.revenue, currentOrg?.currency)],
+      ['Cost of Goods Sold (COGS)', `(${formatCurrency(is.cogs, currentOrg?.currency)})`],
+      ['Gross Profit', formatCurrency(is.grossProfit, currentOrg?.currency)],
+      ['Operating Expenses', `(${formatCurrency(is.operatingExpenses, currentOrg?.currency)})`],
+      ['Damage Losses', `(${formatCurrency(is.damageLosses, currentOrg?.currency)})`],
+      ['Total Operating Expenses', `(${formatCurrency(is.totalOperatingExpenses, currentOrg?.currency)})`],
+      ['Net Income', formatCurrency(is.netIncome, currentOrg?.currency)],
+    ], ['Account', 'Amount']);
 
-    autoTable(doc, {
-      startY: finalY + 20,
-      head: [['Day', 'Income', 'Expense', 'Net']],
-      body: analysis.weeklyData.map(d => [
-        d.day,
-        formatCurrency(d.income, currentOrg?.currency),
-        formatCurrency(d.expense, currentOrg?.currency),
-        formatCurrency(d.income - d.expense, currentOrg?.currency)
-      ]),
-      theme: 'grid',
-      headStyles: { fillColor: [79, 70, 229] }
-    });
+    // Balance Sheet
+    const bs = financialData.balanceSheet;
+    addSection('Balance Sheet', [
+      ['Current Assets (Cash, Inventory)', formatCurrency(bs.totalAssets, currentOrg?.currency)],
+      ['Total Liabilities', formatCurrency(bs.totalLiabilities, currentOrg?.currency)],
+      ['Total Equity', formatCurrency(bs.equity, currentOrg?.currency)],
+    ], ['Category', 'Amount']);
 
-    doc.save(`financial-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`Financial_Report_${currentOrg?.name || 'Business'}_${dateStr}.pdf`);
   };
 
   return (
     <div className="space-y-8">
-      {isManager ? (
-        <>
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-zinc-100">Financial Reports</h2>
-            <div className="flex gap-3">
-              <button 
-                onClick={downloadReportPDF}
-                className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl transition-colors border border-zinc-700"
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-indigo-600/10 rounded-2xl">
+            <BarChart3 className="w-8 h-8 text-indigo-500" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold text-zinc-100">Financial Reports</h2>
+            <p className="text-zinc-400">Standardized financial statements and performance analytics</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+            {(['7', '30', '90', 'all'] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  "px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all",
+                  period === p ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-zinc-500 hover:text-zinc-300"
+                )}
               >
-                <Download className="w-4 h-4" /> Export PDF
+                {p === 'all' ? 'All' : `${p}D`}
               </button>
-              <select 
-                value={period}
-                onChange={(e) => setPeriod(e.target.value as any)}
-                className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl text-sm font-bold text-zinc-400 outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="7">Last 7 Days</option>
-                <option value="30">Last 30 Days</option>
-                <option value="90">Last 90 Days</option>
-                <option value="all">All Time</option>
-              </select>
-            </div>
-          </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-indigo-600/10 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-indigo-500" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-zinc-500 uppercase">Peak Sales Hour</p>
-              <h4 className="text-xl font-black text-zinc-100">{analysis.peakHour}</h4>
-            </div>
-          </div>
-          <p className="text-xs text-zinc-500">Most active time for your business based on transaction volume.</p>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-emerald-600/10 rounded-lg">
-              <Sparkles className="w-5 h-5 text-emerald-500" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-zinc-500 uppercase">Best Performing Day</p>
-              <h4 className="text-xl font-black text-zinc-100">{analysis.bestDay}</h4>
-            </div>
-          </div>
-          <p className="text-xs text-zinc-500">The day of the week with the highest recorded revenue.</p>
-        </div>
-      </div>
-
-      <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h3 className="text-xl font-bold text-zinc-100">Weekly Progress</h3>
-            <p className="text-sm text-zinc-500">Revenue and expenses trend over the last 7 days</p>
-          </div>
-          <div className="flex items-center gap-4 text-xs font-bold">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-indigo-500" />
-              <span className="text-zinc-400">Income</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-rose-500" />
-              <span className="text-zinc-400">Expense</span>
-            </div>
-          </div>
-        </div>
-        <div className="h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={analysis.weeklyData}>
-              <defs>
-                <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-              <XAxis dataKey="day" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${getCurrencySymbol(currentOrg?.currency)}${value}`} />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
-                itemStyle={{ color: '#f4f4f5' }}
-              />
-              <Area type="monotone" dataKey="income" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" />
-              <Area type="monotone" dataKey="expense" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h3 className="text-xl font-bold text-zinc-100">Hourly Sales Analysis</h3>
-            <p className="text-sm text-zinc-500">Distribution of sales volume throughout the day</p>
-          </div>
-        </div>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={analysis.hourlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-              <XAxis dataKey="hour" stroke="#71717a" fontSize={10} tickLine={false} axisLine={false} />
-              <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
-                itemStyle={{ color: '#f4f4f5' }}
-                cursor={{ fill: '#27272a' }}
-              />
-              <Bar dataKey="amount" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-          <h3 className="text-lg font-bold text-zinc-100 mb-6">Income by Category</h3>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={analysis.incomeData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {analysis.incomeData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
-                  itemStyle={{ color: '#f4f4f5' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 space-y-2">
-            {analysis.incomeData.map((item, i) => (
-              <div key={item.name} className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                  <span className="text-zinc-400">{item.name}</span>
-                </div>
-                <span className="font-bold text-zinc-100">{formatCurrency(item.value, currentOrg?.currency)}</span>
-              </div>
             ))}
           </div>
+          <button 
+            onClick={downloadReportPDF}
+            className="flex items-center gap-2 px-6 py-2.5 bg-zinc-100 hover:bg-white text-zinc-900 font-bold rounded-xl transition-all shadow-lg shadow-white/5"
+          >
+            <FileDown className="w-5 h-5" />
+            Export PDF
+          </button>
         </div>
+      </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
-          <h3 className="text-lg font-bold text-zinc-100 mb-6">Expenses by Category</h3>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={analysis.expenseData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {analysis.expenseData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+      {/* Tabs */}
+      <div className="flex border-b border-zinc-800 overflow-x-auto no-scrollbar">
+        {[
+          { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+          { id: 'income_statement', label: 'Income Statement', icon: TrendingUp },
+          { id: 'balance_sheet', label: 'Balance Sheet', icon: Building2 },
+          { id: 'cash_flow', label: 'Cash Flow', icon: Wallet },
+          { id: 'equity_statement', label: 'Equity', icon: ShieldCheck },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={cn(
+              "flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all border-b-2 whitespace-nowrap",
+              activeTab === tab.id 
+                ? "border-indigo-500 text-indigo-500 bg-indigo-500/5" 
+                : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+            )}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-8">
+        {activeTab === 'overview' && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Total Revenue</p>
+                <h3 className="text-2xl font-black text-zinc-100">{formatCurrency(financialData.charts.totalIncome, currentOrg?.currency)}</h3>
+                <div className="mt-4 flex items-center gap-2 text-emerald-500 text-xs font-bold">
+                  <TrendingUp className="w-4 h-4" />
+                  <span>+12.5% from last period</span>
+                </div>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Total Expenses</p>
+                <h3 className="text-2xl font-black text-zinc-100">{formatCurrency(financialData.charts.totalExpense, currentOrg?.currency)}</h3>
+                <div className="mt-4 flex items-center gap-2 text-rose-500 text-xs font-bold">
+                  <TrendingDown className="w-4 h-4" />
+                  <span>+5.2% from last period</span>
+                </div>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Net Profit</p>
+                <h3 className="text-2xl font-black text-indigo-400">{formatCurrency(financialData.incomeStatement.netIncome, currentOrg?.currency)}</h3>
+                <div className="mt-4 flex items-center gap-2 text-indigo-500 text-xs font-bold">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Healthy margin</span>
+                </div>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Operating Margin</p>
+                <h3 className="text-2xl font-black text-zinc-100">
+                  {financialData.incomeStatement.revenue > 0 
+                    ? ((financialData.incomeStatement.operatingIncome / financialData.incomeStatement.revenue) * 100).toFixed(1)
+                    : '0.0'}%
+                </h3>
+                <div className="mt-4 flex items-center gap-2 text-zinc-500 text-xs font-bold">
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Efficiency score</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl">
+                <h3 className="text-lg font-bold text-zinc-100 mb-8">Revenue by Category</h3>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={financialData.charts.incomeData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={80}
+                        outerRadius={100}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {financialData.charts.incomeData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
+                        itemStyle={{ color: '#f4f4f5' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-8">
+                  {financialData.charts.incomeData.map((item, index) => (
+                    <div key={item.name} className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                      <span className="text-sm text-zinc-400">{item.name}</span>
+                      <span className="text-sm font-bold text-zinc-100 ml-auto">{formatCurrency(item.value, currentOrg?.currency)}</span>
+                    </div>
                   ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
-                  itemStyle={{ color: '#f4f4f5' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 space-y-2">
-            {analysis.expenseData.map((item, i) => (
-              <div key={item.name} className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                  <span className="text-zinc-400">{item.name}</span>
-                </div>
-                <span className="font-bold text-zinc-100">{formatCurrency(item.value, currentOrg?.currency)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl">
-        <h3 className="text-xl font-bold text-zinc-100 mb-8">Profit & Loss Summary</h3>
-        <div className="space-y-6">
-          <div className="flex justify-between items-center pb-4 border-b border-zinc-800">
-            <span className="text-zinc-400">Total Revenue</span>
-            <span className="text-xl font-bold text-emerald-500">{formatCurrency(analysis.totalIncome, currentOrg?.currency)}</span>
-          </div>
-          <div className="flex justify-between items-center pb-4 border-b border-zinc-800">
-            <span className="text-zinc-400">Total Operating Expenses</span>
-            <span className="text-xl font-bold text-rose-500">({formatCurrency(analysis.totalExpense, currentOrg?.currency)})</span>
-          </div>
-          <div className="flex justify-between items-center pt-4">
-            <span className="text-xl font-bold text-zinc-100">Net Profit</span>
-            <span className={cn(
-              "text-3xl font-black",
-              analysis.totalIncome - analysis.totalExpense >= 0 ? "text-indigo-400" : "text-rose-500"
-            )}>
-              {formatCurrency(analysis.totalIncome - analysis.totalExpense, currentOrg?.currency)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl">
-        <div className="flex justify-between items-center mb-8">
-          <h3 className="text-xl font-bold text-zinc-100">Recent Receipts</h3>
-          <Store className="w-5 h-5 text-zinc-500" />
-        </div>
-        <div className="space-y-4">
-          {receipts.length === 0 ? (
-            <p className="text-center text-zinc-500 py-8">No receipts found.</p>
-          ) : (
-            receipts.slice(0, 10).map((receipt) => (
-              <div 
-                key={receipt.id}
-                onClick={() => setSelectedReceipt(receipt)}
-                className="flex items-center justify-between p-4 bg-zinc-800/30 border border-zinc-800 hover:border-indigo-500/50 rounded-2xl cursor-pointer transition-all group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-zinc-800 rounded-xl group-hover:bg-indigo-600 transition-colors">
-                    <Receipt className="w-5 h-5 text-zinc-400 group-hover:text-white" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-zinc-100">Receipt #{receipt.id.slice(0, 8)}</p>
-                    <p className="text-xs text-zinc-500">{formatDate(receipt.date)} • {receipt.items.length} items</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-black text-zinc-100">{formatCurrency(receipt.total, currentOrg?.currency)}</p>
-                  <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">{receipt.paymentMethod}</p>
                 </div>
               </div>
-            ))
-          )}
-        </div>
-      </div>
 
-      <AnimatePresence>
-        {selectedReceipt && (
-          <ReceiptModal receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
+              <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl">
+                <h3 className="text-lg font-bold text-zinc-100 mb-8">
+                  {period === '7' ? 'Weekly Performance' : 
+                   period === '30' ? 'Monthly Performance' : 
+                   period === '90' ? 'Quarterly Performance' : 'Yearly Performance'}
+                </h3>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={financialData.charts.performanceData}>
+                      <defs>
+                        <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                      <XAxis dataKey="label" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px' }}
+                        itemStyle={{ color: '#f4f4f5' }}
+                      />
+                      <Area type="monotone" dataKey="income" stroke="#4f46e5" fillOpacity={1} fill="url(#colorIncome)" strokeWidth={3} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </>
         )}
-      </AnimatePresence>
-        </>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center">
-            <Lock className="w-8 h-8 text-zinc-600" />
+
+        {activeTab === 'income_statement' && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30">
+              <h3 className="text-xl font-bold text-zinc-100">Income Statement (Profit & Loss)</h3>
+              <p className="text-zinc-400 text-sm">For the period ending {new Date().toLocaleDateString()}</p>
+            </div>
+            <div className="p-8 space-y-8">
+              {/* Revenue Section */}
+              <section>
+                <h4 className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-4">Revenue</h4>
+                <div className="space-y-3">
+                  {Object.entries(financialData.incomeStatement.incomeByCategory).map(([cat, amount]) => (
+                    <div key={cat} className="flex justify-between items-center py-2 border-b border-zinc-800/50">
+                      <span className="text-zinc-300">{cat}</span>
+                      <span className="text-zinc-100 font-medium">{formatCurrency(amount as number, currentOrg?.currency)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center py-4 text-lg font-bold text-zinc-100">
+                    <span>Total Revenue</span>
+                    <span>{formatCurrency(financialData.incomeStatement.revenue, currentOrg?.currency)}</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* COGS Section */}
+              <section>
+                <h4 className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-4">Cost of Goods Sold</h4>
+                <div className="flex justify-between items-center py-4 border-b border-zinc-800/50">
+                  <span className="text-zinc-300">Direct Costs (Inventory Cost)</span>
+                  <span className="text-zinc-100 font-medium">({formatCurrency(financialData.incomeStatement.cogs, currentOrg?.currency)})</span>
+                </div>
+                <div className="flex justify-between items-center py-6 text-xl font-black text-emerald-400">
+                  <span>Gross Profit</span>
+                  <span>{formatCurrency(financialData.incomeStatement.grossProfit, currentOrg?.currency)}</span>
+                </div>
+              </section>
+
+              {/* Expenses Section */}
+              <section>
+                <h4 className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-4">Operating Expenses</h4>
+                <div className="space-y-3">
+                  {Object.entries(financialData.incomeStatement.expenseByCategory).map(([cat, amount]) => (
+                    <div key={cat} className="flex justify-between items-center py-2 border-b border-zinc-800/50">
+                      <span className="text-zinc-300">{cat}</span>
+                      <span className="text-zinc-100 font-medium">({formatCurrency(amount as number, currentOrg?.currency)})</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center py-2 border-b border-zinc-800/50">
+                    <span className="text-zinc-300 italic">Damage Losses (Non-Cash)</span>
+                    <span className="text-zinc-100 font-medium">({formatCurrency(financialData.incomeStatement.damageLosses, currentOrg?.currency)})</span>
+                  </div>
+                  <div className="flex justify-between items-center py-4 text-lg font-bold text-zinc-100">
+                    <span>Total Operating Expenses</span>
+                    <span>({formatCurrency(financialData.incomeStatement.totalOperatingExpenses, currentOrg?.currency)})</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Bottom Line */}
+              <div className="p-6 bg-indigo-600 rounded-2xl flex justify-between items-center">
+                <div>
+                  <h4 className="text-white/70 text-xs font-bold uppercase tracking-widest">Net Income (Bottom Line)</h4>
+                  <p className="text-3xl font-black text-white mt-1">{formatCurrency(financialData.incomeStatement.netIncome, currentOrg?.currency)}</p>
+                </div>
+                <div className="p-4 bg-white/10 rounded-xl">
+                  <TrendingUp className="w-8 h-8 text-white" />
+                </div>
+              </div>
+            </div>
           </div>
-          <h3 className="text-xl font-bold text-zinc-100">Restricted Access</h3>
-          <p className="text-zinc-500 max-w-sm">You don't have permission to view business reports. Please contact your administrator.</p>
-        </div>
-      )}
+        )}
+
+        {activeTab === 'balance_sheet' && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30">
+              <h3 className="text-xl font-bold text-zinc-100">Balance Sheet (Statement of Financial Position)</h3>
+              <p className="text-zinc-400 text-sm">As of {new Date().toLocaleDateString()}</p>
+            </div>
+            <div className="p-8 grid grid-cols-1 lg:grid-cols-2 gap-12">
+              {/* Assets Column */}
+              <div className="space-y-8">
+                <section>
+                  <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-6 pb-2 border-b border-emerald-500/20">Assets</h4>
+                  <div className="space-y-6">
+                    <div>
+                      <h5 className="text-sm font-bold text-zinc-400 mb-3">Current Assets</h5>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Cash & Equivalents</span>
+                          <span>{formatCurrency(financialData.balanceSheet.assets.current.cash, currentOrg?.currency)}</span>
+                        </div>
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Inventory</span>
+                          <span>{formatCurrency(financialData.balanceSheet.assets.current.inventory, currentOrg?.currency)}</span>
+                        </div>
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Accounts Receivable</span>
+                          <span>{formatCurrency(financialData.balanceSheet.assets.current.accountsReceivable, currentOrg?.currency)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-zinc-400 mb-3">Non-Current Assets</h5>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Equipment & Machinery</span>
+                          <span>{formatCurrency(financialData.balanceSheet.assets.nonCurrent.equipment, currentOrg?.currency)}</span>
+                        </div>
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Property</span>
+                          <span>{formatCurrency(financialData.balanceSheet.assets.nonCurrent.property, currentOrg?.currency)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-4 border-t border-zinc-800 flex justify-between text-xl font-black text-zinc-100">
+                      <span>Total Assets</span>
+                      <span>{formatCurrency(financialData.balanceSheet.totalAssets, currentOrg?.currency)}</span>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              {/* Liabilities & Equity Column */}
+              <div className="space-y-8">
+                <section>
+                  <h4 className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-6 pb-2 border-b border-rose-500/20">Liabilities & Equity</h4>
+                  <div className="space-y-6">
+                    <div>
+                      <h5 className="text-sm font-bold text-zinc-400 mb-3">Current Liabilities</h5>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Accounts Payable</span>
+                          <span>{formatCurrency(financialData.balanceSheet.liabilities.current.accountsPayable, currentOrg?.currency)}</span>
+                        </div>
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Short-term Loans</span>
+                          <span>{formatCurrency(financialData.balanceSheet.liabilities.current.shortTermLoans, currentOrg?.currency)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-zinc-400 mb-3">Non-Current Liabilities</h5>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Long-term Debt</span>
+                          <span>{formatCurrency(financialData.balanceSheet.liabilities.nonCurrent.longTermDebt, currentOrg?.currency)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-4 border-t border-zinc-800 flex justify-between font-bold text-zinc-100">
+                      <span>Total Liabilities</span>
+                      <span>{formatCurrency(financialData.balanceSheet.totalLiabilities, currentOrg?.currency)}</span>
+                    </div>
+                    
+                    <div className="pt-8">
+                      <h5 className="text-sm font-bold text-indigo-500 mb-3 uppercase tracking-widest">Shareholder Equity</h5>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-zinc-100">
+                          <span>Retained Earnings</span>
+                          <span>{formatCurrency(financialData.balanceSheet.equity, currentOrg?.currency)}</span>
+                        </div>
+                      </div>
+                      <div className="pt-4 border-t border-zinc-800 flex justify-between text-xl font-black text-indigo-400">
+                        <span>Total Liabilities & Equity</span>
+                        <span>{formatCurrency(financialData.balanceSheet.totalLiabilities + financialData.balanceSheet.equity, currentOrg?.currency)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'cash_flow' && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30">
+              <h3 className="text-xl font-bold text-zinc-100">Cash Flow Statement</h3>
+              <p className="text-zinc-400 text-sm">Direct movement of cash for the period</p>
+            </div>
+            <div className="p-8 space-y-10">
+              <section>
+                <h4 className="text-sm font-bold text-zinc-100 mb-6 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Operating Activities
+                </h4>
+                <div className="space-y-4 pl-4 border-l-2 border-zinc-800">
+                  <div className="flex justify-between text-zinc-300">
+                    <span>Net Income</span>
+                    <span>{formatCurrency(financialData.cashFlow.operating.netIncome, currentOrg?.currency)}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-300">
+                    <span>Adjustments (Damage Losses)</span>
+                    <span className="text-emerald-400">+{formatCurrency(financialData.cashFlow.operating.adjustments, currentOrg?.currency)}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-300">
+                    <span>Changes in Working Capital (Inventory)</span>
+                    <span className="text-rose-400">({formatCurrency(Math.abs(financialData.cashFlow.operating.changesInWorkingCapital), currentOrg?.currency)})</span>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-sm font-bold text-zinc-100 mb-6 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  Investing Activities
+                </h4>
+                <div className="space-y-4 pl-4 border-l-2 border-zinc-800">
+                  <div className="flex justify-between text-zinc-300">
+                    <span>Purchase of Fixed Assets</span>
+                    <span>{formatCurrency(financialData.cashFlow.investing.assetPurchases, currentOrg?.currency)}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-sm font-bold text-zinc-100 mb-6 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
+                  Financing Activities
+                </h4>
+                <div className="space-y-4 pl-4 border-l-2 border-zinc-800">
+                  <div className="flex justify-between text-zinc-300">
+                    <span>Capital Injection</span>
+                    <span>{formatCurrency(financialData.cashFlow.financing.capitalInjection, currentOrg?.currency)}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-300">
+                    <span>Dividends Paid</span>
+                    <span>({formatCurrency(financialData.cashFlow.financing.dividends, currentOrg?.currency)})</span>
+                  </div>
+                </div>
+              </section>
+
+              <div className="pt-8 border-t border-zinc-800 flex justify-between items-center">
+                <h4 className="text-lg font-bold text-zinc-100">Net Increase/Decrease in Cash</h4>
+                <span className={cn(
+                  "text-2xl font-black",
+                  financialData.cashFlow.netCashFlow >= 0 ? "text-emerald-400" : "text-rose-400"
+                )}>
+                  {formatCurrency(financialData.cashFlow.netCashFlow, currentOrg?.currency)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'equity_statement' && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30">
+              <h3 className="text-xl font-bold text-zinc-100">Statement of Changes in Equity</h3>
+              <p className="text-zinc-400 text-sm">Tracking the net value of the business</p>
+            </div>
+            <div className="p-8">
+              <div className="bg-zinc-800/50 rounded-2xl p-8 space-y-6">
+                <div className="flex justify-between items-center text-zinc-400">
+                  <span>Opening Balance (Retained Earnings)</span>
+                  <span>{formatCurrency(financialData.balanceSheet.equity - financialData.incomeStatement.netIncome, currentOrg?.currency)}</span>
+                </div>
+                <div className="flex justify-between items-center text-emerald-400 font-bold">
+                  <span>Net Income for the Period</span>
+                  <span>+{formatCurrency(financialData.incomeStatement.netIncome, currentOrg?.currency)}</span>
+                </div>
+                <div className="flex justify-between items-center text-rose-400 font-bold">
+                  <span>Dividends / Drawings</span>
+                  <span>({formatCurrency(0, currentOrg?.currency)})</span>
+                </div>
+                <div className="pt-6 border-t border-zinc-700 flex justify-between items-center text-2xl font-black text-indigo-400">
+                  <span>Closing Balance</span>
+                  <span>{formatCurrency(financialData.balanceSheet.equity, currentOrg?.currency)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1430,6 +1711,7 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
   const { currentOrg } = useFirebase();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [damages, setDamages] = useState<DamageRecord[]>([]);
   const [chartPeriod, setChartPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month');
 
   useEffect(() => {
@@ -1444,21 +1726,62 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
       [],
       setTransactions
     );
-    return () => { unsubInv(); unsubTx(); };
+    const unsubDamages = subscribeToCollection<DamageRecord>(
+      `organizations/${currentOrg.id}/damages`,
+      [],
+      setDamages
+    );
+    return () => { unsubInv(); unsubTx(); unsubDamages(); };
   }, [currentOrg]);
 
-  const stats = useMemo(() => {
-    const totalSales = transactions
+  const pnlData = useMemo(() => {
+    const revenue = transactions
       .filter(t => t.type === 'income')
       .reduce((acc, t) => acc + t.amount, 0);
-    const totalExpenses = transactions
+
+    const cogs = transactions
+      .filter(t => t.type === 'income')
+      .reduce((acc, t) => {
+        const itemCost = t.items?.reduce((iAcc, item) => iAcc + (item.quantity * (item.cost || 0)), 0) || 0;
+        return acc + itemCost;
+      }, 0);
+
+    const grossProfit = revenue - cogs;
+
+    const operatingExpenses = transactions
       .filter(t => t.type === 'expense')
       .reduce((acc, t) => acc + t.amount, 0);
+
+    const damageLosses = damages.reduce((acc, d) => {
+      const item = inventory.find(i => i.id === d.itemId);
+      const cost = item ? item.cost : 0; // Fallback if item not found
+      return acc + (d.quantity * cost);
+    }, 0);
+
+    const totalOperatingExpenses = operatingExpenses + damageLosses;
+    const operatingIncome = grossProfit - totalOperatingExpenses;
+    const netIncome = operatingIncome; // Assuming no non-operating income/taxes for now as per simple POS
+
+    return {
+      revenue,
+      cogs,
+      grossProfit,
+      operatingExpenses,
+      damageLosses,
+      totalOperatingExpenses,
+      operatingIncome,
+      netIncome
+    };
+  }, [inventory, transactions, damages]);
+
+  const stats = useMemo(() => {
+    const totalSales = pnlData.revenue;
+    const totalExpenses = pnlData.totalOperatingExpenses;
     const stockValue = inventory.reduce((acc, item) => acc + (item.quantity * item.cost), 0);
-    const profit = totalSales - totalExpenses;
+    const profit = pnlData.netIncome;
 
     return { totalSales, totalExpenses, stockValue, profit };
-  }, [inventory, transactions]);
+  }, [inventory, pnlData]);
 
   const chartData = useMemo(() => {
     const now = new Date();
@@ -1472,14 +1795,20 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
       periods = Array.from({ length: 7 }, (_, i) => {
         const d = new Date();
         d.setDate(d.getDate() - (6 - i));
-        return d.toISOString().split('T')[0];
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
       });
       format = (d) => d.toLocaleDateString('en-US', { weekday: 'short' });
     } else if (chartPeriod === 'month') {
       periods = Array.from({ length: 30 }, (_, i) => {
         const d = new Date();
         d.setDate(d.getDate() - (29 - i));
-        return d.toISOString().split('T')[0];
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
       });
       format = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     } else {
@@ -1491,12 +1820,28 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
       format = (d) => d.toLocaleDateString('en-US', { month: 'short' });
     }
 
-    const groupedTxs = transactions.reduce((acc, tx) => {
+    const allFinancialData = [
+      ...transactions.map(t => ({ date: t.date, type: t.type, amount: t.amount })),
+      ...damages.map(d => {
+        const cost = d.cost || inventory.find(i => i.id === d.itemId)?.cost || 0;
+        return { date: d.date, type: 'expense', amount: cost * d.quantity };
+      })
+    ];
+
+    const groupedTxs = allFinancialData.reduce((acc, tx) => {
       let key = '';
       const txDate = new Date(tx.date);
-      if (chartPeriod === 'day') key = `${txDate.getHours()}:00`;
-      else if (chartPeriod === 'year') key = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
-      else key = tx.date;
+      if (chartPeriod === 'day') {
+        if (txDate.toDateString() !== now.toDateString()) return acc;
+        key = `${txDate.getHours()}:00`;
+      } else if (chartPeriod === 'year') {
+        key = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+      } else {
+        const y = txDate.getFullYear();
+        const m = String(txDate.getMonth() + 1).padStart(2, '0');
+        const d = String(txDate.getDate()).padStart(2, '0');
+        key = `${y}-${m}-${d}`;
+      }
 
       if (!acc[key]) acc[key] = { income: 0, expense: 0 };
       if (tx.type === 'income') acc[key].income += tx.amount;
@@ -1508,8 +1853,11 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
       const stats = groupedTxs[p] || { income: 0, expense: 0 };
       let name = p;
       if (chartPeriod !== 'day') {
-        const d = new Date(p + (chartPeriod === 'year' ? '-01' : ''));
-        name = format(d);
+        const parts = p.split('-').map(Number);
+        const date = parts.length === 3 
+          ? new Date(parts[0], parts[1] - 1, parts[2]) 
+          : new Date(parts[0], parts[1] - 1, 1);
+        name = format(date);
       }
       
       return {
@@ -1519,7 +1867,7 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
         fullDate: p
       };
     });
-  }, [transactions, chartPeriod]);
+  }, [transactions, damages, chartPeriod]);
 
   const handleDownloadData = () => {
     const headers = ['Date', 'Revenue', 'Expenses', 'Net'];
@@ -1542,6 +1890,57 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDownloadPNL = () => {
+    const doc = new jsPDF();
+    const now = new Date();
+    const dateStr = now.toLocaleDateString();
+    
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(15, 23, 42); // Navy
+    doc.text('Profit & Loss Statement', 105, 20, { align: 'center' });
+    
+    doc.setFontSize(14);
+    doc.text(currentOrg?.name || 'JENA POS', 105, 30, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Generated on: ${dateStr}`, 105, 38, { align: 'center' });
+    
+    // Summary Table
+    const tableData: any[][] = [
+      ['Revenue', formatCurrency(pnlData.revenue, currentOrg?.currency)],
+      ['Cost of Goods Sold (COGS)', `(${formatCurrency(pnlData.cogs, currentOrg?.currency)})`],
+      [{ content: 'Gross Profit', styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } as any }, { content: formatCurrency(pnlData.grossProfit, currentOrg?.currency), styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } as any }],
+      ['', ''],
+      ['Operating Expenses', `(${formatCurrency(pnlData.operatingExpenses, currentOrg?.currency)})`],
+      ['Damage Losses', `(${formatCurrency(pnlData.damageLosses, currentOrg?.currency)})`],
+      [{ content: 'Total Operating Expenses', styles: { fontStyle: 'bold' } as any }, `(${formatCurrency(pnlData.totalOperatingExpenses, currentOrg?.currency)})`],
+      ['', ''],
+      [{ content: 'Operating Income (EBIT)', styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } as any }, { content: formatCurrency(pnlData.operatingIncome, currentOrg?.currency), styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } as any }],
+      [{ content: 'Net Income (Bottom Line)', styles: { fontStyle: 'bold', fillColor: [79, 70, 229], textColor: [255, 255, 255] } as any }, { content: formatCurrency(pnlData.netIncome, currentOrg?.currency), styles: { fontStyle: 'bold', fillColor: [79, 70, 229], textColor: [255, 255, 255] } as any }],
+    ];
+
+    autoTable(doc, {
+      startY: 45,
+      head: [['Description', 'Amount']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
+      columnStyles: {
+        1: { halign: 'right' }
+      }
+    });
+
+    // Footer
+    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text('This statement is generated automatically by JENA POS. Most P&L statements use the accrual method, recording revenue when earned and expenses when incurred.', 20, finalY, { maxWidth: 170 });
+    
+    doc.save(`PNL_Statement_${currentOrg?.name || 'Business'}_${dateStr}.pdf`);
   };
 
   return (
@@ -1587,6 +1986,13 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <h3 className="text-lg font-bold text-zinc-100">Revenue vs Expenses</h3>
                 <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleDownloadPNL}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/20"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    Download P&L Statement
+                  </button>
                   <div className="flex bg-zinc-800 p-1 rounded-xl">
                     {(['day', 'week', 'month', 'year'] as const).map((p) => (
                       <button
@@ -3160,6 +3566,7 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
       await createDocument(`organizations/${currentOrg.id}/damages`, {
         ...newDamage,
         itemName: item.name,
+        cost: item.cost,
         date: now,
         createdAt: now,
         updatedAt: now
@@ -3506,82 +3913,117 @@ function HelpCard({ title, description, steps }: { title: string, description: s
 
 function HelpSection() {
   return (
-    <div className="max-w-4xl space-y-8">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="p-3 bg-indigo-600/10 rounded-2xl">
-          <HelpCircle className="w-8 h-8 text-indigo-500" />
-        </div>
-        <div>
-          <h2 className="text-3xl font-bold text-zinc-100">Help Center</h2>
-          <p className="text-zinc-400">Learn how to manage your business with JENA POS</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <HelpCard 
-          title="Dashboard" 
-          description="View your business performance at a glance. Track sales, expenses, and net profit in real-time."
-          steps={[
-            "Check 'Total Sales' for daily revenue",
-            "Monitor 'Stock Value' to manage inventory investment",
-            "View 'Revenue vs Expenses' chart for trends"
-          ]}
-        />
-        <HelpCard 
-          title="Point of Sale (POS)" 
-          description="The core of your sales operations. Process customer orders quickly and efficiently."
-          steps={[
-            "Select items from the grid or search by name",
-            "Adjust quantities in the cart",
-            "Click 'Checkout' to process the sale and print/save receipt"
-          ]}
-        />
-        <HelpCard 
-          title="Inventory Management" 
-          description="Keep track of your products, stock levels, and costs."
-          steps={[
-            "Add new items with 'Add Item' button",
-            "Set 'Alert Level' to get notified when stock is low",
-            "Update stock levels after receiving new shipments"
-          ]}
-        />
-        <HelpCard 
-          title="Reports & Analytics" 
-          description="Deep dive into your financial data with detailed reports."
-          steps={[
-            "Filter reports by date range (7, 30, 90 days)",
-            "Export financial summaries as PDF",
-            "Analyze 'Best Performing Day' and 'Peak Sales Hour'"
-          ]}
-        />
-      </div>
-
-      <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-6">
+    <div className="max-w-5xl space-y-12 pb-20">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-600/10 rounded-2xl">
-            <Users className="w-8 h-8 text-indigo-500" />
+          <div className="p-4 bg-indigo-600/10 rounded-3xl">
+            <HelpCircle className="w-10 h-10 text-indigo-500" />
           </div>
           <div>
-            <h3 className="text-2xl font-bold text-zinc-100">About Developer</h3>
-            <p className="text-zinc-400">Meet the mind behind JENA POS</p>
+            <h2 className="text-4xl font-black text-zinc-100 tracking-tight">Help Center</h2>
+            <p className="text-zinc-400 text-lg">Master your business with JENA POS v2.0</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+          <span className="text-emerald-500 text-xs font-bold uppercase tracking-widest">System Online & Updated</span>
+        </div>
+      </div>
+
+      {/* Recent Updates Banner */}
+      <div className="bg-indigo-600 p-8 rounded-[2.5rem] relative overflow-hidden group">
+        <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500">
+          <Sparkles className="w-32 h-32 text-white" />
+        </div>
+        <div className="relative z-10 space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 rounded-full text-white text-[10px] font-bold uppercase tracking-widest">
+            New Update
+          </div>
+          <h3 className="text-3xl font-black text-white">Professional Financial Reporting</h3>
+          <p className="text-white/80 max-w-2xl text-lg leading-relaxed">
+            We've upgraded our reporting engine to follow international accounting standards. 
+            You now have access to professional Income Statements, Balance Sheets, and Cash Flow tracking.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <HelpCard 
+          title="Financial Statements" 
+          description="Redesigned reports page with GAAP/IFRS compliant financial statements."
+          steps={[
+            "Income Statement: View Revenue, COGS, and Net Profit",
+            "Balance Sheet: Track Assets, Liabilities, and Equity",
+            "Cash Flow: Monitor actual cash movement",
+            "Export PDF: Generate professional reports for stakeholders"
+          ]}
+        />
+        <HelpCard 
+          title="Performance Analytics" 
+          description="Dynamic charts that adapt to your selected time period (7d, 30d, 90d, All)."
+          steps={[
+            "Weekly/Monthly Performance: Track income vs expense trends",
+            "Revenue by Category: See which products drive your business",
+            "Peak Sales Hour: Identify your busiest times of day",
+            "Period Filtering: Analyze quarterly or yearly growth"
+          ]}
+        />
+        <HelpCard 
+          title="Damage Management" 
+          description="Track inventory losses and their impact on your bottom line."
+          steps={[
+            "Record damages directly from the 'Damages' tab",
+            "Automatic stock adjustment upon recording",
+            "Losses are automatically added to the Income Statement",
+            "Historical cost tracking for accurate financial reporting"
+          ]}
+        />
+        <HelpCard 
+          title="Inventory & POS" 
+          description="Efficient sales processing and robust stock control."
+          steps={[
+            "POS: Quick search and multi-item checkout",
+            "Inventory: Low-stock alerts and cost tracking",
+            "Receipts: Automatic generation for every transaction",
+            "Categories: Organize products for better reporting"
+          ]}
+        />
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[2.5rem] space-y-8">
+        <div className="flex items-center gap-6">
+          <div className="p-4 bg-indigo-600/10 rounded-2xl">
+            <Users className="w-10 h-10 text-indigo-500" />
+          </div>
+          <div>
+            <h3 className="text-3xl font-black text-zinc-100 tracking-tight">About Developer</h3>
+            <p className="text-zinc-400 text-lg">The vision behind the platform</p>
           </div>
         </div>
         
-        <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
-          <div className="w-32 h-32 rounded-full bg-zinc-800 border-4 border-zinc-700 flex items-center justify-center overflow-hidden shrink-0">
-            <Sparkles className="w-16 h-16 text-indigo-500" />
+        <div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
+          <div className="w-48 h-48 rounded-[3rem] bg-zinc-800 border-8 border-zinc-800/50 flex items-center justify-center overflow-hidden shrink-0 shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500">
+            <Sparkles className="w-24 h-24 text-indigo-500" />
           </div>
-          <div className="space-y-4">
-            <h4 className="text-xl font-bold text-zinc-100">Micheal Sakwa</h4>
+          <div className="space-y-6">
+            <h4 className="text-2xl font-black text-zinc-100">Micheal Sakwa</h4>
+            <p className="text-zinc-400 leading-relaxed text-lg italic">
+              "My mission is to democratize professional business tools for every entrepreneur."
+            </p>
             <p className="text-zinc-400 leading-relaxed">
-              Micheal Sakwa is a passionate software developer dedicated to building innovative solutions that empower small businesses. 
-              With a focus on user experience and robust functionality, he creates tools that simplify complex business processes. 
+              Micheal Sakwa is a visionary software developer dedicated to building innovative solutions that empower small businesses. 
+              With a focus on user experience and robust financial accuracy, he creates tools that simplify complex business processes. 
               JENA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.
             </p>
-            <div className="flex gap-4">
-              <a href="https://github.com/MichealSakwa" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 text-sm font-bold transition-colors">GitHub Profile</a>
-              <span className="text-zinc-700">|</span>
-              <span className="text-zinc-500 text-sm">Software Engineer & Product Designer</span>
+            <div className="flex flex-wrap gap-6 pt-4">
+              <a href="https://github.com/MichealSakwa" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-bold transition-colors">
+                <Github className="w-5 h-5" />
+                <span>GitHub Profile</span>
+              </a>
+              <div className="flex items-center gap-2 text-zinc-500">
+                <Code2 className="w-5 h-5" />
+                <span>Software Engineer & Product Designer</span>
+              </div>
             </div>
           </div>
         </div>
