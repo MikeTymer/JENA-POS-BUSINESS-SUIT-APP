@@ -2831,7 +2831,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[calc(100vh-12rem)] lg:h-[calc(100vh-12rem)]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[calc(100vh-12rem)]">
       <AnimatePresence>
         {lastReceipt && (
           <ReceiptModal receipt={lastReceipt} onClose={() => setLastReceipt(null)} />
@@ -2894,7 +2894,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
       </div>
 
       {/* Cart / Checkout */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col overflow-hidden shadow-2xl">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-[32px] flex flex-col shadow-2xl h-fit sticky top-24">
         <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
           <h3 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
             <ShoppingCart className="w-6 h-6 text-indigo-500" />
@@ -2921,7 +2921,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="p-6 space-y-4">
           <AnimatePresence initial={false}>
             {cart.length === 0 ? (
               <motion.div 
