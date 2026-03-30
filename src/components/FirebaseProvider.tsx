@@ -23,6 +23,7 @@ export interface Organization {
   currency?: string;
   address?: string;
   uprsRegistrationNumber?: string;
+  logoUrl?: string;
   plan: string;
   subscriptionStatus: string;
   createdAt: any;
@@ -36,6 +37,12 @@ export interface UserProfile {
   photoURL: string | null;
   phoneNumber: string | null;
   plan: 'trial' | 'basic' | 'essentials' | 'plus' | 'advanced';
+  notificationPreferences?: {
+    sales?: boolean;
+    inventory?: boolean;
+    reports?: boolean;
+    security?: boolean;
+  };
   createdAt: any;
 }
 

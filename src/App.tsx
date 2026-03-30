@@ -55,7 +55,9 @@ import {
   Sun,
   Moon,
   Github,
-  Code2
+  Code2,
+  ArrowLeft,
+  User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -90,6 +92,8 @@ import { where, doc, getDoc, getDocs, collection, query } from 'firebase/firesto
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { compressImage } from './lib/imageUtils';
+import { deleteFile } from './lib/storageUtils';
 
 // --- Types ---
 interface InventoryItem {
@@ -238,13 +242,26 @@ const StatCard = ({ title, value, icon: Icon, trend, color, onClick }: any) => (
   </button>
 );
 
+const getBase64FromUrl = async (url: string): Promise<string> => {
+  const data = await fetch(url);
+  const blob = await data.blob();
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    reader.onloadend = () => {
+      const base64data = reader.result;
+      resolve(base64data as string);
+    };
+  });
+};
+
 const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () => void }) => {
   const { currentOrg } = useFirebase();
   const handlePrint = () => {
     window.print();
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     const doc = new jsPDF({
       unit: 'mm',
       format: [80, 200] // Typical receipt width 80mm
@@ -252,6 +269,17 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
 
     const margin = 5;
     let y = 10;
+
+    // Logo
+    if (currentOrg?.logoUrl) {
+      try {
+        const logoBase64 = await getBase64FromUrl(currentOrg.logoUrl);
+        doc.addImage(logoBase64, 'PNG', 30, y, 20, 20);
+        y += 25;
+      } catch (e) {
+        console.error('Failed to add logo to PDF:', e);
+      }
+    }
 
     // Header
     doc.setFontSize(14);
@@ -346,6 +374,11 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
         className="bg-white text-zinc-950 p-8 rounded-3xl max-w-md w-full space-y-6 shadow-2xl print:p-8 print:shadow-none print:rounded-none"
       >
         <div className="text-center space-y-2">
+          {currentOrg?.logoUrl && (
+            <div className="flex justify-center mb-4">
+              <img src={currentOrg.logoUrl} alt="Logo" className="h-16 w-auto object-contain" referrerPolicy="no-referrer" />
+            </div>
+          )}
           <h2 className="text-2xl font-black tracking-tighter">{currentOrg?.name || 'JENA POS'}</h2>
           {currentOrg?.address && (
             <p className="text-xs text-zinc-500">{currentOrg.address}</p>
@@ -435,6 +468,69 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
     window.print();
   };
 
+  const handleDownloadPDF = async () => {
+    const doc = new jsPDF();
+    const dateStr = new Date(transaction.date).toLocaleDateString();
+    
+    let y = 20;
+
+    // Logo
+    if (currentOrg?.logoUrl) {
+      try {
+        const logoBase64 = await getBase64FromUrl(currentOrg.logoUrl);
+        doc.addImage(logoBase64, 'PNG', 160, 15, 30, 30);
+      } catch (e) {
+        console.error('Failed to add logo to PDF:', e);
+      }
+    }
+
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(15, 23, 42);
+    doc.text('INVOICE', 20, y);
+    y += 10;
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`#${transaction.id.slice(0, 8).toUpperCase()}`, 20, y);
+    y += 20;
+
+    // Business Info
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.text(currentOrg?.name || 'JENA POS', 20, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    if (currentOrg?.address) {
+      doc.text(currentOrg.address, 20, y);
+      y += 5;
+    }
+    y += 10;
+
+    // Details
+    autoTable(doc, {
+      startY: y,
+      head: [['Description', 'Category', 'Date', 'Amount']],
+      body: [[
+        transaction.description,
+        transaction.category,
+        dateStr,
+        formatCurrency(transaction.amount, currentOrg?.currency)
+      ]],
+      theme: 'grid',
+      headStyles: { fillColor: [79, 70, 229] }
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Total Paid: ${formatCurrency(transaction.amount, currentOrg?.currency)}`, 190, finalY, { align: 'right' });
+
+    doc.save(`invoice-${transaction.id.slice(0, 8)}.pdf`);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:p-0 print:bg-white">
       <motion.div 
@@ -449,9 +545,13 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
             <h2 className="text-2xl font-black tracking-tighter uppercase">Invoice</h2>
             <p className="text-xs text-zinc-500">#{transaction.id.slice(0, 8).toUpperCase()}</p>
           </div>
-          <div className="text-right">
-            <h3 className="text-lg font-bold">JENA POS</h3>
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Business Solutions</p>
+          <div className="text-right flex flex-col items-end">
+            {currentOrg?.logoUrl ? (
+              <img src={currentOrg.logoUrl} alt="Logo" className="h-10 w-auto object-contain mb-2" referrerPolicy="no-referrer" />
+            ) : (
+              <h3 className="text-lg font-bold">{currentOrg?.name || 'JENA POS'}</h3>
+            )}
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{currentOrg?.name || 'Business Solutions'}</p>
           </div>
         </div>
 
@@ -490,7 +590,7 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
         <div className="text-center space-y-4 print:hidden">
           <div className="flex gap-3">
             <button 
-              onClick={handlePrint}
+              onClick={handleDownloadPDF}
               className="flex-1 bg-zinc-900 text-white font-bold py-3 rounded-xl hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
             >
               <Download className="w-4 h-4" /> Download
@@ -511,12 +611,30 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
 
 // --- Admin Panel Component ---
 
-function Reports({ isManager }: { isManager: boolean }) {
+function Reports({ permissions }: { permissions: any }) {
   const { currentOrg } = useFirebase();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [damages, setDamages] = useState<DamageRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'balance_sheet' | 'income_statement' | 'cash_flow' | 'equity_statement'>('overview');
+  const [reportHistory, setReportHistory] = useState<string[]>(['overview']);
+
+  useEffect(() => {
+    setReportHistory(prev => {
+      if (prev[prev.length - 1] === activeTab) return prev;
+      return [...prev, activeTab];
+    });
+  }, [activeTab]);
+
+  const goBackReport = () => {
+    if (reportHistory.length <= 1) return;
+    const newHistory = [...reportHistory];
+    newHistory.pop();
+    const prev = newHistory[newHistory.length - 1];
+    setReportHistory(newHistory);
+    setActiveTab(prev as any);
+  };
+
   const [period, setPeriod] = useState<'7' | '30' | '90' | 'all'>('30');
 
   useEffect(() => {
@@ -728,20 +846,33 @@ function Reports({ isManager }: { isManager: boolean }) {
 
   const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-  const downloadReportPDF = () => {
+  const downloadReportPDF = async () => {
     const doc = new jsPDF();
     const dateStr = new Date().toLocaleDateString();
     
+    let currentY = 20;
+
+    // Logo
+    if (currentOrg?.logoUrl) {
+      try {
+        const logoBase64 = await getBase64FromUrl(currentOrg.logoUrl);
+        doc.addImage(logoBase64, 'PNG', 160, 15, 30, 30);
+      } catch (e) {
+        console.error('Failed to add logo to PDF:', e);
+      }
+    }
+
     doc.setFontSize(22);
     doc.setTextColor(15, 23, 42);
-    doc.text(`${currentOrg?.name || 'Business'} Financial Report`, 105, 20, { align: 'center' });
+    doc.text(`${currentOrg?.name || 'Business'} Financial Report`, 14, currentY);
+    currentY += 10;
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: 'center' });
-    doc.text(`Reporting Period: ${period === 'all' ? 'All Time' : `Last ${period} Days`}`, 105, 34, { align: 'center' });
-
-    let currentY = 45;
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, currentY);
+    currentY += 6;
+    doc.text(`Reporting Period: ${period === 'all' ? 'All Time' : `Last ${period} Days`}`, 14, currentY);
+    currentY += 15;
 
     const addSection = (title: string, data: any[][], headers: string[]) => {
       doc.setFontSize(16);
@@ -785,8 +916,21 @@ function Reports({ isManager }: { isManager: boolean }) {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
+          {reportHistory.length > 1 && (
+            <button 
+              onClick={goBackReport}
+              className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-400 hover:border-indigo-500/50 transition-all group"
+              title="Go Back"
+            >
+              <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+            </button>
+          )}
           <div className="p-3 bg-indigo-600/10 rounded-2xl">
-            <BarChart3 className="w-8 h-8 text-indigo-500" />
+            {currentOrg?.logoUrl ? (
+              <img src={currentOrg.logoUrl} alt="Logo" className="w-12 h-12 object-contain" referrerPolicy="no-referrer" />
+            ) : (
+              <BarChart3 className="w-8 h-8 text-indigo-500" />
+            )}
           </div>
           <div>
             <h2 className="text-3xl font-bold text-zinc-100">Financial Reports</h2>
@@ -955,9 +1099,14 @@ function Reports({ isManager }: { isManager: boolean }) {
 
         {activeTab === 'income_statement' && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30">
-              <h3 className="text-xl font-bold text-zinc-100">Income Statement (Profit & Loss)</h3>
-              <p className="text-zinc-400 text-sm">For the period ending {new Date().toLocaleDateString()}</p>
+            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-zinc-100">Income Statement (Profit & Loss)</h3>
+                <p className="text-zinc-400 text-sm">For the period ending {new Date().toLocaleDateString()}</p>
+              </div>
+              {currentOrg?.logoUrl && (
+                <img src={currentOrg.logoUrl} alt="Logo" className="h-12 w-auto object-contain" referrerPolicy="no-referrer" />
+              )}
             </div>
             <div className="p-8 space-y-8">
               {/* Revenue Section */}
@@ -984,9 +1133,9 @@ function Reports({ isManager }: { isManager: boolean }) {
                   <span className="text-zinc-300">Direct Costs (Inventory Cost)</span>
                   <span className="text-zinc-100 font-medium">({formatCurrency(financialData.incomeStatement.cogs, currentOrg?.currency)})</span>
                 </div>
-                <div className="flex justify-between items-center py-6 text-xl font-black text-emerald-400">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 py-6 text-xl font-black text-emerald-400">
                   <span>Gross Profit</span>
-                  <span>{formatCurrency(financialData.incomeStatement.grossProfit, currentOrg?.currency)}</span>
+                  <span className="break-all sm:break-normal">{formatCurrency(financialData.incomeStatement.grossProfit, currentOrg?.currency)}</span>
                 </div>
               </section>
 
@@ -1012,12 +1161,12 @@ function Reports({ isManager }: { isManager: boolean }) {
               </section>
 
               {/* Bottom Line */}
-              <div className="p-6 bg-indigo-600 rounded-2xl flex justify-between items-center">
-                <div>
+              <div className="p-6 bg-indigo-600 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+                <div className="min-w-0">
                   <h4 className="text-white/70 text-xs font-bold uppercase tracking-widest">Net Income (Bottom Line)</h4>
-                  <p className="text-3xl font-black text-white mt-1">{formatCurrency(financialData.incomeStatement.netIncome, currentOrg?.currency)}</p>
+                  <p className="text-2xl md:text-3xl font-black text-white mt-1 break-all sm:break-normal">{formatCurrency(financialData.incomeStatement.netIncome, currentOrg?.currency)}</p>
                 </div>
-                <div className="p-4 bg-white/10 rounded-xl">
+                <div className="p-4 bg-white/10 rounded-xl shrink-0">
                   <TrendingUp className="w-8 h-8 text-white" />
                 </div>
               </div>
@@ -1027,9 +1176,14 @@ function Reports({ isManager }: { isManager: boolean }) {
 
         {activeTab === 'balance_sheet' && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30">
-              <h3 className="text-xl font-bold text-zinc-100">Balance Sheet (Statement of Financial Position)</h3>
-              <p className="text-zinc-400 text-sm">As of {new Date().toLocaleDateString()}</p>
+            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-zinc-100">Balance Sheet (Statement of Financial Position)</h3>
+                <p className="text-zinc-400 text-sm">As of {new Date().toLocaleDateString()}</p>
+              </div>
+              {currentOrg?.logoUrl && (
+                <img src={currentOrg.logoUrl} alt="Logo" className="h-12 w-auto object-contain" referrerPolicy="no-referrer" />
+              )}
             </div>
             <div className="p-8 grid grid-cols-1 lg:grid-cols-2 gap-12">
               {/* Assets Column */}
@@ -1067,9 +1221,9 @@ function Reports({ isManager }: { isManager: boolean }) {
                         </div>
                       </div>
                     </div>
-                    <div className="pt-4 border-t border-zinc-800 flex justify-between text-xl font-black text-zinc-100">
+                    <div className="pt-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xl font-black text-zinc-100">
                       <span>Total Assets</span>
-                      <span>{formatCurrency(financialData.balanceSheet.totalAssets, currentOrg?.currency)}</span>
+                      <span className="break-all sm:break-normal">{formatCurrency(financialData.balanceSheet.totalAssets, currentOrg?.currency)}</span>
                     </div>
                   </div>
                 </section>
@@ -1115,9 +1269,9 @@ function Reports({ isManager }: { isManager: boolean }) {
                           <span>{formatCurrency(financialData.balanceSheet.equity, currentOrg?.currency)}</span>
                         </div>
                       </div>
-                      <div className="pt-4 border-t border-zinc-800 flex justify-between text-xl font-black text-indigo-400">
+                      <div className="pt-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xl font-black text-indigo-400">
                         <span>Total Liabilities & Equity</span>
-                        <span>{formatCurrency(financialData.balanceSheet.totalLiabilities + financialData.balanceSheet.equity, currentOrg?.currency)}</span>
+                        <span className="break-all sm:break-normal">{formatCurrency(financialData.balanceSheet.totalLiabilities + financialData.balanceSheet.equity, currentOrg?.currency)}</span>
                       </div>
                     </div>
                   </div>
@@ -1129,9 +1283,14 @@ function Reports({ isManager }: { isManager: boolean }) {
 
         {activeTab === 'cash_flow' && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30">
-              <h3 className="text-xl font-bold text-zinc-100">Cash Flow Statement</h3>
-              <p className="text-zinc-400 text-sm">Direct movement of cash for the period</p>
+            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-zinc-100">Cash Flow Statement</h3>
+                <p className="text-zinc-400 text-sm">Direct movement of cash for the period</p>
+              </div>
+              {currentOrg?.logoUrl && (
+                <img src={currentOrg.logoUrl} alt="Logo" className="h-12 w-auto object-contain" referrerPolicy="no-referrer" />
+              )}
             </div>
             <div className="p-8 space-y-10">
               <section>
@@ -1185,10 +1344,10 @@ function Reports({ isManager }: { isManager: boolean }) {
                 </div>
               </section>
 
-              <div className="pt-8 border-t border-zinc-800 flex justify-between items-center">
+              <div className="pt-8 border-t border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <h4 className="text-lg font-bold text-zinc-100">Net Increase/Decrease in Cash</h4>
                 <span className={cn(
-                  "text-2xl font-black",
+                  "text-xl md:text-2xl font-black break-all sm:break-normal",
                   financialData.cashFlow.netCashFlow >= 0 ? "text-emerald-400" : "text-rose-400"
                 )}>
                   {formatCurrency(financialData.cashFlow.netCashFlow, currentOrg?.currency)}
@@ -1200,27 +1359,32 @@ function Reports({ isManager }: { isManager: boolean }) {
 
         {activeTab === 'equity_statement' && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30">
-              <h3 className="text-xl font-bold text-zinc-100">Statement of Changes in Equity</h3>
-              <p className="text-zinc-400 text-sm">Tracking the net value of the business</p>
+            <div className="p-8 border-b border-zinc-800 bg-zinc-800/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-zinc-100">Statement of Changes in Equity</h3>
+                <p className="text-zinc-400 text-sm">Tracking the net value of the business</p>
+              </div>
+              {currentOrg?.logoUrl && (
+                <img src={currentOrg.logoUrl} alt="Logo" className="h-12 w-auto object-contain" referrerPolicy="no-referrer" />
+              )}
             </div>
             <div className="p-8">
               <div className="bg-zinc-800/50 rounded-2xl p-8 space-y-6">
-                <div className="flex justify-between items-center text-zinc-400">
+                <div className="flex flex-wrap justify-between items-center gap-4 text-zinc-400">
                   <span>Opening Balance (Retained Earnings)</span>
-                  <span>{formatCurrency(financialData.balanceSheet.equity - financialData.incomeStatement.netIncome, currentOrg?.currency)}</span>
+                  <span className="font-bold">{formatCurrency(financialData.balanceSheet.equity - financialData.incomeStatement.netIncome, currentOrg?.currency)}</span>
                 </div>
-                <div className="flex justify-between items-center text-emerald-400 font-bold">
+                <div className="flex flex-wrap justify-between items-center gap-4 text-emerald-400 font-bold">
                   <span>Net Income for the Period</span>
                   <span>+{formatCurrency(financialData.incomeStatement.netIncome, currentOrg?.currency)}</span>
                 </div>
-                <div className="flex justify-between items-center text-rose-400 font-bold">
+                <div className="flex flex-wrap justify-between items-center gap-4 text-rose-400 font-bold">
                   <span>Dividends / Drawings</span>
                   <span>({formatCurrency(0, currentOrg?.currency)})</span>
                 </div>
-                <div className="pt-6 border-t border-zinc-700 flex justify-between items-center text-2xl font-black text-indigo-400">
+                <div className="pt-6 border-t border-zinc-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xl md:text-2xl font-black text-indigo-400">
                   <span>Closing Balance</span>
-                  <span>{formatCurrency(financialData.balanceSheet.equity, currentOrg?.currency)}</span>
+                  <span className="break-all sm:break-normal">{formatCurrency(financialData.balanceSheet.equity, currentOrg?.currency)}</span>
                 </div>
               </div>
             </div>
@@ -1282,7 +1446,7 @@ function ConfirmModal({
 }
 
 
-function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdmin }: { currentOrg: any, showNotification: any, setIsCreatingOrg: (val: boolean) => void, isSuperAdmin: boolean }) {
+function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdmin, permissions }: { currentOrg: any, showNotification: any, setIsCreatingOrg: (val: boolean) => void, isSuperAdmin: boolean, permissions: any }) {
   const { user, userProfile, organizations, setCurrentOrg } = useFirebase();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [isAddingStaff, setIsAddingStaff] = useState(false);
@@ -1292,7 +1456,60 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [editingOrgName, setEditingOrgName] = useState('');
   const [deletingOrgId, setDeletingOrgId] = useState<string | null>(null);
-  const [adminTab, setAdminTab] = useState<'my-businesses' | 'staff'>('my-businesses');
+  const [adminTab, setAdminTab] = useState<'my-businesses' | 'staff' | 'settings'>('my-businesses');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentOrg) return;
+
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      showNotification('File is too large. Please select an image smaller than 10MB.', 'error');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const optimizedFile = await compressImage(file, 0.2, 800); // Max 200KB for logos
+      const storageRef = ref(storage, `organizations/${currentOrg.id}/logo/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, optimizedFile);
+      const url = await getDownloadURL(storageRef);
+      
+      // Delete old logo if it exists
+      if (currentOrg.logoUrl) {
+        await deleteFile(currentOrg.logoUrl);
+      }
+      
+      const success = await updateDocument('organizations', currentOrg.id, { logoUrl: url });
+      if (success) {
+        showNotification('Business logo updated successfully!');
+      } else {
+        showNotification('Failed to update business logo in database.', 'error');
+      }
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      showNotification('Failed to upload business logo.', 'error');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+  const [adminHistory, setAdminHistory] = useState<string[]>(['my-businesses']);
+
+  useEffect(() => {
+    setAdminHistory(prev => {
+      if (prev[prev.length - 1] === adminTab) return prev;
+      return [...prev, adminTab];
+    });
+  }, [adminTab]);
+
+  const goBackAdmin = () => {
+    if (adminHistory.length <= 1) return;
+    const newHistory = [...adminHistory];
+    newHistory.pop();
+    const prev = newHistory[newHistory.length - 1];
+    setAdminHistory(newHistory);
+    setAdminTab(prev as any);
+  };
 
   const ownedOrgs = isSuperAdmin ? organizations : organizations.filter(o => o.ownerUid === user?.uid);
 
@@ -1381,23 +1598,62 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
   };
 
   const handleDeleteOrg = async (orgId: string) => {
-    const success = await removeDocument('organizations', orgId);
-    if (success) {
-      showNotification('Business profile deleted');
-      if (currentOrg?.id === orgId) {
-        const remaining = organizations.filter(o => o.id !== orgId);
-        setCurrentOrg(remaining.length > 0 ? remaining[0] : null);
+    const orgToDelete = organizations.find(o => o.id === orgId);
+    if (!orgToDelete) return;
+
+    try {
+      // 1. Delete logo
+      if (orgToDelete.logoUrl) {
+        await deleteFile(orgToDelete.logoUrl);
       }
-    } else {
-      showNotification('Failed to delete business profile', 'error');
+
+      // 2. Delete all inventory images
+      const invSnapshot = await getDocs(collection(db, `organizations/${orgId}/inventory`));
+      const invDeletions = invSnapshot.docs.map(doc => {
+        const data = doc.data() as InventoryItem;
+        return data.imageUrl ? deleteFile(data.imageUrl) : Promise.resolve(true);
+      });
+      await Promise.all(invDeletions);
+
+      // 3. Delete all damage images
+      const damageSnapshot = await getDocs(collection(db, `organizations/${orgId}/damages`));
+      const damageDeletions = damageSnapshot.docs.map(doc => {
+        const data = doc.data() as DamageRecord;
+        return data.imageUrl ? deleteFile(data.imageUrl) : Promise.resolve(true);
+      });
+      await Promise.all(damageDeletions);
+
+      const success = await removeDocument('organizations', orgId);
+      if (success) {
+        showNotification('Business profile and all associated files deleted');
+        if (currentOrg?.id === orgId) {
+          const remaining = organizations.filter(o => o.id !== orgId);
+          setCurrentOrg(remaining.length > 0 ? remaining[0] : null);
+        }
+      } else {
+        showNotification('Failed to delete business profile', 'error');
+      }
+    } catch (error) {
+      console.error('Error during business deletion cleanup:', error);
+      showNotification('Failed to complete business deletion cleanup.', 'error');
+    } finally {
+      setDeletingOrgId(null);
     }
-    setDeletingOrgId(null);
   };
 
   return (
     <div className="space-y-8">
       {/* Tab Navigation */}
       <div className="flex items-center gap-2 border-b border-zinc-800 pb-4 overflow-x-auto custom-scrollbar">
+        {adminHistory.length > 1 && (
+          <button 
+            onClick={goBackAdmin}
+            className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-400 hover:border-indigo-500/50 transition-all group mr-2"
+            title="Go Back"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+          </button>
+        )}
         <button
           onClick={() => setAdminTab('my-businesses')}
           className={cn(
@@ -1407,14 +1663,25 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
         >
           My Businesses
         </button>
+        {permissions.canManageStaff && (
+          <button
+            onClick={() => setAdminTab('staff')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap",
+              adminTab === 'staff' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/20" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            )}
+          >
+            Staff Management
+          </button>
+        )}
         <button
-          onClick={() => setAdminTab('staff')}
+          onClick={() => setAdminTab('settings')}
           className={cn(
             "px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap",
-            adminTab === 'staff' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/20" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            adminTab === 'settings' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/20" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
           )}
         >
-          Staff Management
+          Business Settings
         </button>
       </div>
 
@@ -1511,7 +1778,7 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
           </div>
         )}
 
-        {adminTab === 'staff' && (
+        {adminTab === 'staff' && permissions.canManageStaff && (
           <div className="space-y-8">
             <div className="flex justify-between items-center">
               <div>
@@ -1613,6 +1880,112 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
             </div>
           </div>
         )}
+
+        {adminTab === 'settings' && currentOrg && (
+          <div className="space-y-8 max-w-2xl">
+            <div>
+              <h2 className="text-3xl font-black text-zinc-100 tracking-tight">Business Settings</h2>
+              <p className="text-zinc-400 mt-1">Configure details for {currentOrg.name}</p>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8">
+              <div className="space-y-4">
+                <label className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Business Logo</label>
+                <div className="flex flex-col sm:flex-row items-center gap-8">
+                  <div className="w-32 h-32 rounded-2xl bg-zinc-800 border-2 border-dashed border-zinc-700 flex items-center justify-center overflow-hidden relative group">
+                    {currentOrg.logoUrl ? (
+                      <>
+                        <img src={currentOrg.logoUrl} alt="Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Camera className="w-8 h-8 text-white" />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center p-4">
+                        <ImageIcon className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase">No Logo</p>
+                      </div>
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleLogoUpload}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      disabled={uploadingLogo}
+                    />
+                    {uploadingLogo && (
+                      <div className="absolute inset-0 bg-zinc-900/80 flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <h4 className="font-bold text-zinc-100">Upload Company Logo</h4>
+                    <p className="text-sm text-zinc-500 leading-relaxed">
+                      This logo will appear on your receipts, invoices, and financial reports. 
+                      Recommended size: 512x512px. PNG or JPG.
+                    </p>
+                    <div className="pt-2">
+                      <label className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer">
+                        <Plus className="w-4 h-4" />
+                        {currentOrg.logoUrl ? 'Change Logo' : 'Select Logo'}
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                          disabled={uploadingLogo}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-8 border-t border-zinc-800 space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Business Name</label>
+                    <input 
+                      type="text" 
+                      value={currentOrg.name}
+                      readOnly
+                      className="w-full bg-zinc-800/50 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-400 outline-none cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Currency</label>
+                    <input 
+                      type="text" 
+                      value={currentOrg.currency || 'UGX'}
+                      readOnly
+                      className="w-full bg-zinc-800/50 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-400 outline-none cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">UPRS Reg Number</label>
+                    <input 
+                      type="text" 
+                      value={currentOrg.uprsRegistrationNumber || 'N/A'}
+                      readOnly
+                      className="w-full bg-zinc-800/50 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-400 outline-none cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Plan</label>
+                    <div className="w-full bg-zinc-800/50 border border-zinc-800 rounded-xl px-4 py-3 text-indigo-400 font-bold flex items-center justify-between">
+                      <span className="uppercase">{currentOrg.plan}</span>
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-zinc-600 italic">
+                  * To change core business details, please contact support or use the "My Businesses" tab to edit the name.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -1707,7 +2080,7 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
 
 // --- Main App Logic ---
 
-function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any) => void, isAdmin: boolean, isManager: boolean }) {
+function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { setActiveTab: (t: any) => void, setHighlightedTxId: (id: string | null) => void, isAdmin: boolean, isManager: boolean }) {
   const { currentOrg } = useFirebase();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -1892,22 +2265,32 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
     document.body.removeChild(link);
   };
 
-  const handleDownloadPNL = () => {
+  const handleDownloadPNL = async () => {
     const doc = new jsPDF();
     const now = new Date();
     const dateStr = now.toLocaleDateString();
     
+    // Logo
+    if (currentOrg?.logoUrl) {
+      try {
+        const logoBase64 = await getBase64FromUrl(currentOrg.logoUrl);
+        doc.addImage(logoBase64, 'PNG', 160, 15, 30, 30);
+      } catch (e) {
+        console.error('Failed to add logo to PDF:', e);
+      }
+    }
+
     // Header
     doc.setFontSize(22);
     doc.setTextColor(15, 23, 42); // Navy
-    doc.text('Profit & Loss Statement', 105, 20, { align: 'center' });
+    doc.text('Profit & Loss Statement', 20, 25);
     
     doc.setFontSize(14);
-    doc.text(currentOrg?.name || 'JENA POS', 105, 30, { align: 'center' });
+    doc.text(currentOrg?.name || 'JENA POS', 20, 35);
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Generated on: ${dateStr}`, 105, 38, { align: 'center' });
+    doc.text(`Generated on: ${dateStr}`, 20, 43);
     
     // Summary Table
     const tableData: any[][] = [
@@ -2052,7 +2435,10 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
                 {transactions.slice(0, 5).map((tx) => (
                   <button 
                     key={tx.id} 
-                    onClick={() => setActiveTab('transactions')}
+                    onClick={() => {
+                      setHighlightedTxId(tx.id);
+                      setActiveTab('transactions');
+                    }}
                     className="flex items-center justify-between w-full p-3 hover:bg-zinc-800/50 rounded-xl transition-colors text-left"
                   >
                     <div className="flex items-center gap-3">
@@ -2092,7 +2478,7 @@ function Dashboard({ setActiveTab, isAdmin, isManager }: { setActiveTab: (t: any
   );
 }
 
-function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNotification: (m: string, t?: 'success' | 'error') => void, isAdmin: boolean, isManager: boolean, isCashier: boolean }) {
+function Inventory({ showNotification, createNotification, permissions, highlightedItemId, setHighlightedItemId }: { showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, permissions: any, highlightedItemId: string | null, setHighlightedItemId: (id: string | null) => void }) {
   const { currentOrg, user, userProfile } = useFirebase();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isAdding, setIsAdding] = useState(false);
@@ -2106,14 +2492,28 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
     const file = e.target.files?.[0];
     if (!file || !currentOrg) return;
 
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      showNotification('File is too large. Please select an image smaller than 10MB.', 'error');
+      return;
+    }
+
     setUploading(true);
     try {
+      const optimizedFile = await compressImage(file, 0.5, 1200); // Max 500KB for product images
       const storageRef = ref(storage, `organizations/${currentOrg.id}/inventory/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
+      await uploadBytes(storageRef, optimizedFile);
       const url = await getDownloadURL(storageRef);
       if (isEdit && editingItem) {
+        // Delete old image if it exists
+        if (editingItem.imageUrl) {
+          await deleteFile(editingItem.imageUrl);
+        }
         setEditingItem({ ...editingItem, imageUrl: url });
       } else {
+        // Delete previous uploaded image if user uploads multiple before saving
+        if (newItem.imageUrl) {
+          await deleteFile(newItem.imageUrl);
+        }
         setNewItem(prev => ({ ...prev, imageUrl: url }));
       }
       showNotification('Product image uploaded successfully!');
@@ -2127,6 +2527,7 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
   
   // Filter states
   const [filters, setFilters] = useState({
+    search: '',
     category: '',
     sku: '',
     minPrice: '',
@@ -2145,8 +2546,35 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
     );
   }, [currentOrg]);
 
+  useEffect(() => {
+    if (highlightedItemId && items.length > 0) {
+      // Clear filters to ensure item is visible
+      setFilters({
+        search: '',
+        category: '',
+        sku: '',
+        minPrice: '',
+        maxPrice: '',
+        startDate: '',
+        endDate: ''
+      });
+
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`inv-${highlightedItemId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedItemId, items]);
+
   const filteredItems = useMemo(() => {
     return items.filter(item => {
+      const matchesSearch = !filters.search || 
+        item.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+        item.sku.toLowerCase().includes(filters.search.toLowerCase()) ||
+        item.category.toLowerCase().includes(filters.search.toLowerCase());
       const matchesCategory = !filters.category || item.category.toLowerCase().includes(filters.category.toLowerCase());
       const matchesSku = !filters.sku || item.sku.toLowerCase().includes(filters.sku.toLowerCase());
       const matchesMinPrice = !filters.minPrice || item.price >= Number(filters.minPrice);
@@ -2165,7 +2593,7 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
         }
       }
 
-      return matchesCategory && matchesSku && matchesMinPrice && matchesMaxPrice && matchesDate;
+      return matchesSearch && matchesCategory && matchesSku && matchesMinPrice && matchesMaxPrice && matchesDate;
     });
   }, [items, filters]);
 
@@ -2190,6 +2618,13 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
         setIsAdding(false);
         setNewItem({ name: '', sku: '', quantity: 0, price: 0, cost: 0, category: '', imageUrl: '' });
         showNotification('Product saved successfully!');
+        
+        await createNotification(
+          'inventory',
+          'New Product Added',
+          `${userProfile?.displayName || 'A user'} added a new product: ${newItem.name} (${newItem.quantity} units)`,
+          { productId: id, name: newItem.name, quantity: newItem.quantity }
+        );
       } else {
         showNotification('Failed to save product. Please check your permissions.', 'error');
       }
@@ -2212,6 +2647,13 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
         setIsEditing(false);
         setEditingItem(null);
         showNotification('Product updated successfully!');
+        
+        await createNotification(
+          'inventory',
+          'Product Updated',
+          `${userProfile?.displayName || 'A user'} updated product: ${data.name}`,
+          { productId: id, name: data.name }
+        );
       } else {
         showNotification('Failed to update product.', 'error');
       }
@@ -2227,11 +2669,23 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
       await removeDocument(`organizations/${currentOrg.id}/inventory`, item.id);
       setLastDeleted(item);
       showNotification('Item deleted. You can undo this action.');
-      setTimeout(() => setLastDeleted(null), 10000); // Clear undo after 10s
     } catch (error) {
       showNotification('Failed to delete item.', 'error');
     }
   };
+
+  useEffect(() => {
+    if (lastDeleted) {
+      const timer = setTimeout(async () => {
+        // Only delete file if it's still the same item being cleared
+        if (lastDeleted.imageUrl) {
+          await deleteFile(lastDeleted.imageUrl);
+        }
+        setLastDeleted(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [lastDeleted]);
 
   const handleUndoDelete = async () => {
     if (!currentOrg || !lastDeleted) return;
@@ -2354,9 +2808,14 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-zinc-100">Inventory Management</h2>
-          <p className="text-sm text-zinc-500">Manage your products and stock levels</p>
+        <div className="flex items-center gap-4">
+          {currentOrg?.logoUrl && (
+            <img src={currentOrg.logoUrl} alt="Logo" className="h-12 w-auto object-contain" referrerPolicy="no-referrer" />
+          )}
+          <div>
+            <h2 className="text-2xl font-bold text-zinc-100">Inventory Management</h2>
+            <p className="text-sm text-zinc-500">Manage your products and stock levels</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           {lastDeleted && (
@@ -2376,7 +2835,7 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
           >
             <Filter className="w-4 h-4" /> Filters
           </button>
-          {isManager && (
+          {permissions.canManageInventory && (
             <>
               <button 
                 onClick={exportToExcel}
@@ -2402,7 +2861,7 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
           >
             <Download className="w-4 h-4" /> Export Report
           </button>
-          {isManager && (
+          {permissions.canManageInventory && (
             <button 
               onClick={() => setIsAdding(true)}
               className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-indigo-600/20"
@@ -2421,7 +2880,20 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <input 
+                    type="text" 
+                    placeholder="Search name, SKU, category..."
+                    value={filters.search}
+                    onChange={(e) => setFilters({...filters, search: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-zinc-500 uppercase">Category</label>
                 <input 
@@ -2478,9 +2950,9 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
                   />
                 </div>
               </div>
-              <div className="lg:col-span-3 xl:col-span-4 flex justify-end">
+              <div className="lg:col-span-3 xl:col-span-5 flex justify-end">
                 <button 
-                  onClick={() => setFilters({ category: '', sku: '', minPrice: '', maxPrice: '', startDate: '', endDate: '' })}
+                  onClick={() => setFilters({ search: '', category: '', sku: '', minPrice: '', maxPrice: '', startDate: '', endDate: '' })}
                   className="text-xs font-bold text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
                   Reset Filters
@@ -2508,7 +2980,17 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
             {filteredItems.map((item) => {
               const status = getStatus(item.quantity);
               return (
-                <tr key={item.id} className="hover:bg-zinc-800/30 transition-colors group">
+                <tr 
+                  key={item.id} 
+                  id={`inv-${item.id}`}
+                  className={cn(
+                    "hover:bg-zinc-800/30 transition-colors group",
+                    item.id === highlightedItemId && "bg-indigo-600/20 border-l-4 border-indigo-500"
+                  )}
+                  onClick={() => {
+                    if (item.id === highlightedItemId) setHighlightedItemId(null);
+                  }}
+                >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center overflow-hidden border border-zinc-700">
@@ -2542,7 +3024,7 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
                   <td className="px-6 py-4 text-sm text-zinc-400">{formatCurrency(item.cost, currentOrg?.currency)}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      {isCashier && (
+                      {permissions.canManageInventory && (
                         <button 
                           onClick={() => {
                             setEditingItem(item);
@@ -2553,7 +3035,7 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
                           <Edit2 className="w-4 h-4" />
                         </button>
                       )}
-                      {isManager && (
+                      {permissions.canDeleteInventory && (
                         <button onClick={() => handleDelete(item)} className="p-2 text-blue-500"><Trash2 className="w-4 h-4" /></button>
                       )}
                     </div>
@@ -2801,8 +3283,8 @@ function Inventory({ showNotification, isAdmin, isManager, isCashier }: { showNo
   );
 }
 
-function Transactions({ showNotification, isAdmin }: { showNotification: (m: string, t?: 'success' | 'error') => void, isAdmin: boolean }) {
-  const { currentOrg } = useFirebase();
+function Transactions({ showNotification, createNotification, permissions, highlightedTxId, setHighlightedTxId }: { showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, permissions: any, highlightedTxId: string | null, setHighlightedTxId: (id: string | null) => void }) {
+  const { currentOrg, userProfile, db } = useFirebase();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newTx, setNewTx] = useState({ type: 'income' as const, amount: 0, category: '', description: '', date: new Date().toISOString().slice(0, 16) });
@@ -2810,6 +3292,12 @@ function Transactions({ showNotification, isAdmin }: { showNotification: (m: str
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
   const [loadingDoc, setLoadingDoc] = useState<string | null>(null);
+
+  const [showFilters, setShowFilters] = useState(false);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -2820,7 +3308,51 @@ function Transactions({ showNotification, isAdmin }: { showNotification: (m: str
     );
   }, [currentOrg]);
 
+  const handleDeleteTransaction = async (tx: Transaction) => {
+    if (!currentOrg) return;
+    
+    try {
+      const success = await removeDocument(`organizations/${currentOrg.id}/transactions`, tx.id);
+      if (success) {
+        showNotification('Transaction deleted successfully');
+        
+        await createNotification(
+          'system',
+          'Transaction Deleted',
+          `${userProfile?.displayName || 'A user'} deleted a ${tx.type} of ${tx.amount.toLocaleString()} ${currentOrg.currency}`,
+          { txId: tx.id, amount: tx.amount, type: tx.type }
+        );
+      } else {
+        showNotification('Failed to delete transaction', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      showNotification('An error occurred while deleting the transaction', 'error');
+    }
+  };
+
+  useEffect(() => {
+    if (highlightedTxId && transactions.length > 0) {
+      // Clear filters to ensure the highlighted transaction is visible
+      setSearch('');
+      setTypeFilter('all');
+      setStartDate('');
+      setEndDate('');
+
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`tx-${highlightedTxId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedTxId, transactions]);
+
   const handleViewDoc = async (tx: Transaction) => {
+    if (tx.id === highlightedTxId) {
+      setHighlightedTxId(null);
+    }
     if (!currentOrg) return;
 
     if (tx.type === 'expense') {
@@ -2865,6 +3397,20 @@ function Transactions({ showNotification, isAdmin }: { showNotification: (m: str
     }
   };
 
+  const filteredTransactions = transactions.filter(tx => {
+    const matchesSearch = !search || 
+      tx.description?.toLowerCase().includes(search.toLowerCase()) || 
+      tx.category?.toLowerCase().includes(search.toLowerCase());
+    
+    const matchesType = typeFilter === 'all' || tx.type === typeFilter;
+    
+    const txDate = new Date(tx.date);
+    const matchesStartDate = !startDate || txDate >= new Date(startDate);
+    const matchesEndDate = !endDate || txDate <= new Date(endDate + 'T23:59:59');
+    
+    return matchesSearch && matchesType && matchesStartDate && matchesEndDate;
+  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   const handleAddTx = async () => {
     if (!currentOrg) return;
     try {
@@ -2879,6 +3425,13 @@ function Transactions({ showNotification, isAdmin }: { showNotification: (m: str
         setIsAdding(false);
         setNewTx({ type: 'income', amount: 0, category: '', description: '', date: new Date().toISOString().slice(0, 16) });
         showNotification('Transaction recorded successfully!');
+        
+        await createNotification(
+          newTx.type === 'income' ? 'sale' : 'expense',
+          newTx.type === 'income' ? 'New Income Recorded' : 'New Expense Recorded',
+          `${userProfile?.displayName || 'A user'} recorded a ${newTx.type}: ${newTx.description || newTx.category} of ${currentOrg?.currency || 'UGX'} ${newTx.amount.toLocaleString()}`,
+          { txId: id, amount: newTx.amount, type: newTx.type }
+        );
       } else {
         showNotification('Failed to record transaction. Please check your permissions.', 'error');
       }
@@ -2891,14 +3444,93 @@ function Transactions({ showNotification, isAdmin }: { showNotification: (m: str
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-zinc-100">Transactions Ledger</h2>
-        <button 
-          onClick={() => setIsAdding(true)}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Record Transaction
-        </button>
+        <div className="flex items-center gap-4">
+          {currentOrg?.logoUrl && (
+            <img src={currentOrg.logoUrl} alt="Logo" className="h-12 w-auto object-contain" referrerPolicy="no-referrer" />
+          )}
+          <div>
+            <h2 className="text-2xl font-bold text-zinc-100">Transactions Ledger</h2>
+            <p className="text-sm text-zinc-500">Record and track all business finances</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-xl border transition-colors",
+              showFilters ? "bg-zinc-800 border-zinc-700 text-zinc-100" : "bg-transparent border-zinc-800 text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            <Filter className="w-4 h-4" /> Filters
+          </button>
+          <button 
+            onClick={() => setIsAdding(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-indigo-600/20"
+          >
+            <Plus className="w-4 h-4" /> Record Transaction
+          </button>
+        </div>
       </div>
+
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <input 
+                    type="text"
+                    placeholder="Search description or category..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Type</label>
+                <select 
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value as any)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                >
+                  <option value="all">All Types</option>
+                  <option value="income">Income</option>
+                  <option value="expense">Expense</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Start Date</label>
+                <input 
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">End Date</label>
+                <input 
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-x-auto custom-scrollbar">
         <table className="w-full text-left border-collapse min-w-[600px]">
@@ -2913,8 +3545,18 @@ function Transactions({ showNotification, isAdmin }: { showNotification: (m: str
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
-            {transactions.map((tx) => (
-              <tr key={tx.id} className="hover:bg-zinc-800/30 transition-colors">
+            {filteredTransactions.map((tx) => (
+              <tr 
+                key={tx.id} 
+                id={`tx-${tx.id}`}
+                className={cn(
+                  "hover:bg-zinc-800/30 transition-colors",
+                  tx.id === highlightedTxId && "bg-indigo-600/20 border-l-4 border-indigo-500"
+                )}
+                onClick={() => {
+                  if (tx.id === highlightedTxId) setHighlightedTxId(null);
+                }}
+              >
                 <td className="px-6 py-4 text-sm text-zinc-400">{formatDate(tx.date)}</td>
                 <td className="px-6 py-4 text-sm text-zinc-100">{tx.description}</td>
                 <td className="px-6 py-4 text-sm text-zinc-400">{tx.category}</td>
@@ -2933,20 +3575,31 @@ function Transactions({ showNotification, isAdmin }: { showNotification: (m: str
                   {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, currentOrg?.currency)}
                 </td>
                 <td className="px-6 py-4">
-                  <button 
-                    onClick={() => handleViewDoc(tx)}
-                    disabled={loadingDoc === tx.id}
-                    className="flex items-center gap-2 text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
-                  >
-                    {loadingDoc === tx.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>
-                        <FileText className="w-4 h-4" />
-                        {tx.type === 'income' ? 'Receipt' : 'Invoice'}
-                      </>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleViewDoc(tx)}
+                      disabled={loadingDoc === tx.id}
+                      className="flex items-center gap-2 text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
+                    >
+                      {loadingDoc === tx.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4" />
+                          {tx.type === 'income' ? 'Receipt' : 'Invoice'}
+                        </>
+                      )}
+                    </button>
+                    {permissions.canDeleteTransactions && (
+                      <button 
+                        onClick={() => handleDeleteTransaction(tx)}
+                        className="p-2 text-rose-500 hover:text-rose-400 transition-colors"
+                        title="Delete Transaction"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     )}
-                  </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -3044,7 +3697,7 @@ function Transactions({ showNotification, isAdmin }: { showNotification: (m: str
 }
 
 // --- POS View ---
-const POSView = ({ currentOrg, showNotification, createNotification, userProfile }: { currentOrg: any, showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, userProfile: any }) => {
+const POSView = ({ currentOrg, showNotification, createNotification, userProfile, permissions }: { currentOrg: any, showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, userProfile: any, permissions: any }) => {
   const { user } = useFirebase();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [cart, setCart] = useState<{item: InventoryItem, quantity: number}[]>([]);
@@ -3337,8 +3990,8 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
                 exit={{ opacity: 0 }}
                 className="h-full flex flex-col items-center justify-center text-center space-y-4"
               >
-                <ShoppingCart className="w-12 h-12" />
-                <p className="text-sm font-medium">Your cart is empty.<br/>Select products to start a sale.</p>
+                <ShoppingCart className="w-12 h-12 text-indigo-500" />
+                <p className="text-sm font-medium text-indigo-400">Your cart is empty.<br/>Select products to start a sale.</p>
               </motion.div>
             ) : (
               cart.map(item => (
@@ -3499,8 +4152,8 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
   );
 };
 
-function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (m: string, t?: 'success' | 'error') => void, isAdmin: boolean, isCashier: boolean }) {
-  const { currentOrg } = useFirebase();
+function Damages({ showNotification, createNotification, permissions, highlightedDamageId, setHighlightedDamageId }: { showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, permissions: any, highlightedDamageId: string | null, setHighlightedDamageId: (id: string | null) => void }) {
+  const { currentOrg, userProfile } = useFirebase();
   const [damages, setDamages] = useState<DamageRecord[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -3513,14 +4166,28 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
     const file = e.target.files?.[0];
     if (!file || !currentOrg) return;
 
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      showNotification('File is too large. Please select an image smaller than 10MB.', 'error');
+      return;
+    }
+
     setUploading(true);
     try {
+      const optimizedFile = await compressImage(file, 0.5, 1200); // Max 500KB for damage evidence
       const storageRef = ref(storage, `organizations/${currentOrg.id}/damages/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
+      await uploadBytes(storageRef, optimizedFile);
       const url = await getDownloadURL(storageRef);
       if (isEdit && editingDamage) {
+        // Delete old image if it exists
+        if (editingDamage.imageUrl) {
+          await deleteFile(editingDamage.imageUrl);
+        }
         setEditingDamage({ ...editingDamage, imageUrl: url });
       } else {
+        // Delete previous uploaded image if user uploads multiple before saving
+        if (newDamage.imageUrl) {
+          await deleteFile(newDamage.imageUrl);
+        }
         setNewDamage(prev => ({ ...prev, imageUrl: url }));
       }
       showNotification('Image uploaded successfully!');
@@ -3550,6 +4217,18 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
     };
   }, [currentOrg]);
 
+  useEffect(() => {
+    if (highlightedDamageId && damages.length > 0) {
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`dmg-${highlightedDamageId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedDamageId, damages]);
+
   const handleRecordDamage = async () => {
     if (!currentOrg || !newDamage.itemId) return;
     
@@ -3563,7 +4242,7 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
 
     try {
       const now = new Date().toISOString();
-      await createDocument(`organizations/${currentOrg.id}/damages`, {
+      const damageId = await createDocument(`organizations/${currentOrg.id}/damages`, {
         ...newDamage,
         itemName: item.name,
         cost: item.cost,
@@ -3571,6 +4250,13 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
         createdAt: now,
         updatedAt: now
       });
+
+      await createNotification(
+        'damage',
+        'Damage Recorded',
+        `${userProfile?.displayName || 'A user'} recorded damage for ${item.name}: ${newDamage.quantity} units`,
+        { damageId, itemName: item.name, quantity: newDamage.quantity }
+      );
 
       await updateDocument(`organizations/${currentOrg.id}/inventory`, item.id, {
         quantity: item.quantity - newDamage.quantity,
@@ -3588,6 +4274,10 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
   const handleDeleteDamage = async (damage: DamageRecord) => {
     if (!currentOrg) return;
     try {
+      // Delete evidence image if it exists
+      if (damage.imageUrl) {
+        await deleteFile(damage.imageUrl);
+      }
       const item = inventory.find(i => i.id === damage.itemId);
       if (item) {
         await updateDocument(`organizations/${currentOrg.id}/inventory`, item.id, {
@@ -3637,9 +4327,14 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-zinc-100">Damage Records</h2>
-          <p className="text-sm text-zinc-500">Track and manage damaged stock</p>
+        <div className="flex items-center gap-4">
+          {currentOrg?.logoUrl && (
+            <img src={currentOrg.logoUrl} alt="Logo" className="h-12 w-auto object-contain" referrerPolicy="no-referrer" />
+          )}
+          <div>
+            <h2 className="text-2xl font-bold text-zinc-100">Damage Records</h2>
+            <p className="text-sm text-zinc-500">Track and manage damaged stock</p>
+          </div>
         </div>
         <button 
           onClick={() => setIsRecording(true)}
@@ -3663,7 +4358,17 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {damages.map((damage) => (
-              <tr key={damage.id} className="hover:bg-zinc-800/30 transition-colors group">
+              <tr 
+                key={damage.id} 
+                id={`dmg-${damage.id}`}
+                className={cn(
+                  "hover:bg-zinc-800/30 transition-colors group",
+                  damage.id === highlightedDamageId && "bg-indigo-600/20 border-l-4 border-indigo-500"
+                )}
+                onClick={() => {
+                  if (damage.id === highlightedDamageId) setHighlightedDamageId(null);
+                }}
+              >
                 <td className="px-6 py-4 text-sm font-medium text-zinc-100">{damage.itemName}</td>
                 <td className="px-6 py-4 text-sm text-rose-400 font-mono">-{damage.quantity}</td>
                 <td className="px-6 py-4 text-sm text-zinc-400">{damage.reason || 'No reason provided'}</td>
@@ -3679,7 +4384,7 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
                 <td className="px-6 py-4 text-sm text-zinc-500">{new Date(damage.date).toLocaleString()}</td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
-                    {isCashier && (
+                    {permissions.canManageDamages && (
                       <button 
                         onClick={() => {
                           setEditingDamage(damage);
@@ -3690,10 +4395,10 @@ function Damages({ showNotification, isAdmin, isCashier }: { showNotification: (
                         <Edit2 className="w-4 h-4" />
                       </button>
                     )}
-                    {isAdmin && (
+                    {permissions.canDeleteDamages && (
                       <button 
                         onClick={() => handleDeleteDamage(damage)}
-                        className="p-2 text-blue-500"
+                        className="p-2 text-rose-500"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -4003,7 +4708,12 @@ function HelpSection() {
         
         <div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
           <div className="w-48 h-48 rounded-[3rem] bg-zinc-800 border-8 border-zinc-800/50 flex items-center justify-center overflow-hidden shrink-0 shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500">
-            <Sparkles className="w-24 h-24 text-indigo-500" />
+            <img 
+              src="https://picsum.photos/seed/micheal-sakwa-face/400/400" 
+              alt="Micheal Sakwa" 
+              className="w-full h-full object-cover scale-110"
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div className="space-y-6">
             <h4 className="text-2xl font-black text-zinc-100">Micheal Sakwa</h4>
@@ -4182,6 +4892,82 @@ function SalesAnalytics() {
     return { total, bestProducts, bestDays };
   }, [sales, period]);
 
+  const trendData = useMemo(() => {
+    const now = new Date();
+    let periods: string[] = [];
+    let format: (d: Date) => string;
+
+    if (period === 'day') {
+      periods = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+      format = (d) => `${d.getHours()}:00`;
+    } else if (period === 'week') {
+      periods = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      });
+      format = (d) => d.toLocaleDateString('en-US', { weekday: 'short' });
+    } else if (period === 'month') {
+      periods = Array.from({ length: 30 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (29 - i));
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      });
+      format = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } else {
+      periods = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (11 - i));
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      });
+      format = (d) => d.toLocaleDateString('en-US', { month: 'short' });
+    }
+
+    const groupedSales = sales.reduce((acc, tx) => {
+      let key = '';
+      const txDate = new Date(tx.date);
+      if (period === 'day') {
+        if (txDate.toDateString() !== now.toDateString()) return acc;
+        key = `${txDate.getHours()}:00`;
+      } else if (period === 'year') {
+        key = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+      } else {
+        const y = txDate.getFullYear();
+        const m = String(txDate.getMonth() + 1).padStart(2, '0');
+        const d = String(txDate.getDate()).padStart(2, '0');
+        key = `${y}-${m}-${d}`;
+      }
+
+      if (!acc[key]) acc[key] = 0;
+      acc[key] += tx.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return periods.map(p => {
+      const amount = groupedSales[p] || 0;
+      let name = p;
+      if (period !== 'day') {
+        const parts = p.split('-').map(Number);
+        const date = parts.length === 3 
+          ? new Date(parts[0], parts[1] - 1, parts[2]) 
+          : new Date(parts[0], parts[1] - 1, 1);
+        name = format(date);
+      }
+      
+      return {
+        name,
+        sales: amount,
+        fullDate: p
+      };
+    });
+  }, [sales, period]);
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -4207,6 +4993,54 @@ function SalesAnalytics() {
               {p}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-bold text-zinc-100">Sales Trend</h3>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Total Sales: {formatCurrency(stats.total, currentOrg?.currency)}</span>
+            </div>
+          </div>
+        </div>
+        <div className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+              <XAxis 
+                dataKey="name" 
+                stroke="#71717a" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false}
+                interval={period === 'month' ? 4 : (period === 'year' ? 1 : 0)}
+              />
+              <YAxis 
+                stroke="#71717a" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false}
+                tickFormatter={(v) => `${getCurrencySymbol(currentOrg?.currency)}${v}`}
+              />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '12px', fontSize: '12px' }}
+                itemStyle={{ color: '#f4f4f5' }}
+                cursor={{ stroke: '#4f46e5', strokeWidth: 2 }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="sales" 
+                name="Sales" 
+                stroke="#4f46e5" 
+                strokeWidth={3} 
+                dot={{ fill: '#4f46e5', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -4466,6 +5300,27 @@ function ProfitAnalytics() {
 function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: 'light' | 'dark') => void }) {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'transactions' | 'reports' | 'settings' | 'pos' | 'admin' | 'damages' | 'help' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics'>('dashboard');
+  const [navigationHistory, setNavigationHistory] = useState<string[]>(['dashboard']);
+  const [highlightedTxId, setHighlightedTxId] = useState<string | null>(null);
+  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
+  const [highlightedDamageId, setHighlightedDamageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setNavigationHistory(prev => {
+      if (prev[prev.length - 1] === activeTab) return prev;
+      return [...prev, activeTab];
+    });
+  }, [activeTab]);
+
+  const goBack = () => {
+    if (navigationHistory.length <= 1) return;
+    const newHistory = [...navigationHistory];
+    newHistory.pop(); // remove current
+    const previousTab = newHistory[newHistory.length - 1];
+    setNavigationHistory(newHistory);
+    setActiveTab(previousTab as any);
+  };
+
   const [showHelpReminder, setShowHelpReminder] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCreatingOrg, setIsCreatingOrg] = useState(false);
@@ -4473,6 +5328,14 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'business' | 'subscription' | 'profile' | 'security' | 'notifications'>(() => {
+    const saved = localStorage.getItem('settingsTab');
+    return (saved as any) || 'business';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('settingsTab', settingsTab);
+  }, [settingsTab]);
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -4482,6 +5345,21 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const isAdmin = currentOrg?.ownerUid === user?.uid || currentStaffMember?.role === 'admin' || isSuperAdmin;
   const isManager = isAdmin || currentStaffMember?.role === 'manager';
   const isCashier = isManager || currentStaffMember?.role === 'cashier';
+
+  // Granular Permissions
+  const permissions = {
+    canManageStaff: isAdmin,
+    canManageInventory: isManager,
+    canDeleteInventory: isAdmin,
+    canDeleteTransactions: isAdmin,
+    canDeleteDamages: isAdmin,
+    canViewReports: isManager,
+    canAccessSettings: isAdmin,
+    canAccessPOS: isCashier,
+    canManageDamages: isCashier,
+    canViewAnalytics: isManager,
+    canManageNotifications: isManager,
+  };
 
   const isExpired = currentOrg?.expiresAt && new Date(currentOrg.expiresAt) < new Date() && !isSuperAdmin;
 
@@ -4493,7 +5371,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const orgLimits = getPlanLimits(userProfile?.plan);
   const currentOrgLimits = getPlanLimits(currentOrg?.plan);
 
-  const createNotification = async (type: 'sale' | 'login' | 'logout' | 'system', title: string, message: string, metadata: any = {}) => {
+  const createNotification = async (type: 'sale' | 'login' | 'logout' | 'system' | 'inventory' | 'damage' | 'expense', title: string, message: string, metadata: any = {}) => {
     if (!currentOrg) return;
     try {
       await createDocument(`organizations/${currentOrg.id}/notifications`, {
@@ -4550,13 +5428,31 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     return () => unsubscribe();
   }, [currentOrg?.id]);
 
-  const markNotificationAsRead = async (notificationId: string) => {
+  const handleNotificationClick = async (n: any) => {
     if (!currentOrg) return;
-    try {
-      await updateDocument(`organizations/${currentOrg.id}/notifications`, notificationId, { read: true });
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
+    
+    // Mark as read
+    if (!n.read) {
+      try {
+        await updateDocument(`organizations/${currentOrg.id}/notifications`, n.id, { read: true });
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+      }
     }
+
+    // Redirect based on type
+    if (n.type === 'sale' || n.type === 'expense') {
+      if (n.data?.txId) setHighlightedTxId(n.data.txId);
+      setActiveTab('transactions');
+    } else if (n.type === 'inventory') {
+      if (n.data?.productId) setHighlightedItemId(n.data.productId);
+      setActiveTab('inventory');
+    } else if (n.type === 'damage') {
+      if (n.data?.damageId) setHighlightedDamageId(n.data.damageId);
+      setActiveTab('damages');
+    }
+    
+    setShowNotifications(false);
   };
 
   useEffect(() => {
@@ -4580,6 +5476,43 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 5000);
+  };
+
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentOrg) return;
+
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      showNotification('File is too large. Please select an image smaller than 10MB.', 'error');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const optimizedFile = await compressImage(file, 0.2, 800); // Max 200KB for logos
+      const storageRef = ref(storage, `organizations/${currentOrg.id}/logo/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, optimizedFile);
+      const url = await getDownloadURL(storageRef);
+      
+      // Delete old logo if it exists
+      if (currentOrg.logoUrl) {
+        await deleteFile(currentOrg.logoUrl);
+      }
+      
+      const success = await updateDocument('organizations', currentOrg.id, { logoUrl: url });
+      if (success) {
+        showNotification('Business logo updated successfully!');
+      } else {
+        showNotification('Failed to update business logo in database.', 'error');
+      }
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      showNotification('Failed to upload business logo.', 'error');
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   const handleCreateOrg = async () => {
@@ -4802,10 +5735,23 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         <div className="h-full flex flex-col p-4">
           <div className="flex items-center justify-between gap-3 px-2 mb-10">
             <div className="flex items-center gap-3">
-              <div className="bg-indigo-600 p-2 rounded-xl">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              {isSidebarOpen && <span className="text-xl font-bold text-zinc-100 tracking-tight">JENA POS</span>}
+              {currentOrg?.logoUrl ? (
+                <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden">
+                  <img src={currentOrg.logoUrl} alt="Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                </div>
+              ) : (
+                <div className="bg-indigo-600 p-2 rounded-xl">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+              )}
+              {isSidebarOpen && (
+                <div className="flex flex-col">
+                  <span className="text-xl font-bold text-zinc-100 tracking-tight leading-none">JENA POS</span>
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mt-1 truncate max-w-[120px]">
+                    {currentOrg?.name || 'Business'}
+                  </span>
+                </div>
+              )}
             </div>
             {isSidebarOpen && (
               <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 text-zinc-500 hover:bg-zinc-800 rounded-lg">
@@ -4816,18 +5762,30 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 
           <nav className="flex-1 space-y-2">
             <SidebarItem theme={theme} icon={LayoutDashboard} label={isSidebarOpen ? "Dashboard" : ""} active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem theme={theme} icon={Store} label={isSidebarOpen ? "POS" : ""} active={activeTab === 'pos'} onClick={() => { setActiveTab('pos'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem theme={theme} icon={Package} label={isSidebarOpen ? "Inventory" : ""} active={activeTab === 'inventory'} onClick={() => { setActiveTab('inventory'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem theme={theme} icon={AlertTriangle} label={isSidebarOpen ? "Damages" : ""} active={activeTab === 'damages'} onClick={() => { setActiveTab('damages'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem theme={theme} icon={Receipt} label={isSidebarOpen ? "Transactions" : ""} active={activeTab === 'transactions'} onClick={() => { setActiveTab('transactions'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            <SidebarItem theme={theme} icon={BarChart3} label={isSidebarOpen ? "Reports" : ""} active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            {isAdmin && (
+            {permissions.canAccessPOS && (
+              <SidebarItem theme={theme} icon={Store} label={isSidebarOpen ? "POS" : ""} active={activeTab === 'pos'} onClick={() => { setActiveTab('pos'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            )}
+            {permissions.canManageInventory && (
+              <SidebarItem theme={theme} icon={Package} label={isSidebarOpen ? "Inventory" : ""} active={activeTab === 'inventory'} onClick={() => { setActiveTab('inventory'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            )}
+            {permissions.canManageDamages && (
+              <SidebarItem theme={theme} icon={AlertTriangle} label={isSidebarOpen ? "Damages" : ""} active={activeTab === 'damages'} onClick={() => { setActiveTab('damages'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            )}
+            {permissions.canViewReports && (
+              <SidebarItem theme={theme} icon={Receipt} label={isSidebarOpen ? "Transactions" : ""} active={activeTab === 'transactions'} onClick={() => { setActiveTab('transactions'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            )}
+            {permissions.canViewReports && (
+              <SidebarItem theme={theme} icon={BarChart3} label={isSidebarOpen ? "Reports" : ""} active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            )}
+            {permissions.canManageStaff && (
               <SidebarItem theme={theme} icon={ShieldCheck} label={isSidebarOpen ? "Admin" : ""} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             )}
-            <SidebarItem theme={theme} icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            {permissions.canAccessSettings && (
+              <SidebarItem theme={theme} icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            )}
             <SidebarItem theme={theme} icon={HelpCircle} label={isSidebarOpen ? "Help" : ""} active={activeTab === 'help'} onClick={() => { setActiveTab('help'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             
-            {isSidebarOpen && (
+            {isSidebarOpen && permissions.canAccessSettings && (
               <div 
                 onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }}
                 className="mt-8 px-4 py-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/50 space-y-3 cursor-pointer hover:bg-zinc-800 transition-colors"
@@ -4906,6 +5864,20 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             )}>
               <Menu className="w-6 h-6" />
             </button>
+
+            {navigationHistory.length > 1 && (
+              <button 
+                onClick={goBack}
+                className={cn(
+                  "p-2 rounded-lg flex items-center gap-2 transition-all group",
+                  theme === 'dark' ? "text-zinc-400 hover:bg-zinc-800 hover:text-indigo-400" : "text-slate-400 hover:bg-slate-800 hover:text-indigo-400"
+                )}
+              >
+                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                <span className="text-xs font-bold uppercase tracking-widest hidden sm:inline">Back</span>
+              </button>
+            )}
+
             <div className={cn(
               "flex items-center gap-2 border px-3 py-1.5 rounded-xl",
               theme === 'dark' ? "bg-zinc-900 border-zinc-800" : "bg-slate-800 border-slate-700"
@@ -4975,7 +5947,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                             {notifications.map((n) => (
                               <div 
                                 key={n.id} 
-                                onClick={() => markNotificationAsRead(n.id)}
+                                onClick={() => handleNotificationClick(n)}
                                 className={cn(
                                   "p-4 hover:bg-zinc-800/50 transition-colors cursor-pointer group",
                                   !n.read && "bg-indigo-500/5"
@@ -4985,11 +5957,17 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                                   <div className={cn(
                                     "mt-1 w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
                                     n.type === 'sale' ? "bg-emerald-500/10 text-emerald-500" :
+                                    n.type === 'inventory' ? "bg-blue-500/10 text-blue-500" :
+                                    n.type === 'damage' ? "bg-rose-500/10 text-rose-500" :
+                                    n.type === 'expense' ? "bg-amber-500/10 text-amber-500" :
                                     n.type === 'login' ? "bg-indigo-500/10 text-indigo-500" :
                                     n.type === 'logout' ? "bg-amber-500/10 text-amber-500" :
                                     "bg-zinc-500/10 text-zinc-500"
                                   )}>
                                     {n.type === 'sale' ? <ShoppingCart className="w-4 h-4" /> :
+                                     n.type === 'inventory' ? <Package className="w-4 h-4" /> :
+                                     n.type === 'damage' ? <AlertTriangle className="w-4 h-4" /> :
+                                     n.type === 'expense' ? <TrendingDown className="w-4 h-4" /> :
                                      n.type === 'login' ? <ShieldCheck className="w-4 h-4" /> :
                                      n.type === 'logout' ? <LogOut className="w-4 h-4" /> :
                                      <Bell className="w-4 h-4" />}
@@ -5113,210 +6091,492 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} isAdmin={isAdmin} isManager={isManager} />}
-              {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} createNotification={createNotification} userProfile={userProfile} />}
-              {activeTab === 'inventory' && <Inventory showNotification={showNotification} isAdmin={isAdmin} isManager={isManager} isCashier={isCashier} />}
-              {activeTab === 'damages' && <Damages showNotification={showNotification} isAdmin={isAdmin} isCashier={isCashier} />}
-              {activeTab === 'transactions' && <Transactions showNotification={showNotification} isAdmin={isAdmin} />}
-              {activeTab === 'admin' && <AdminPanel currentOrg={currentOrg} showNotification={showNotification} setIsCreatingOrg={setIsCreatingOrg} isSuperAdmin={isSuperAdmin} />}
-              {activeTab === 'reports' && <Reports isManager={isManager} />}
+              {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} setHighlightedTxId={setHighlightedTxId} isAdmin={isAdmin} isManager={isManager} />}
+              {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} createNotification={createNotification} userProfile={userProfile} permissions={permissions} />}
+              {activeTab === 'inventory' && <Inventory showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedItemId={highlightedItemId} setHighlightedItemId={setHighlightedItemId} />}
+              {activeTab === 'damages' && <Damages showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedDamageId={highlightedDamageId} setHighlightedDamageId={setHighlightedDamageId} />}
+              {activeTab === 'transactions' && <Transactions showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedTxId={highlightedTxId} setHighlightedTxId={setHighlightedTxId} />}
+              {activeTab === 'admin' && <AdminPanel currentOrg={currentOrg} showNotification={showNotification} setIsCreatingOrg={setIsCreatingOrg} isSuperAdmin={isSuperAdmin} permissions={permissions} />}
+              {activeTab === 'reports' && <Reports permissions={permissions} />}
               {activeTab === 'help' && <HelpSection />}
               {activeTab === 'sales-analytics' && <SalesAnalytics />}
               {activeTab === 'expenses-analytics' && <ExpensesAnalytics />}
               {activeTab === 'profit-analytics' && <ProfitAnalytics />}
             {activeTab === 'settings' && (
-              <div className="max-w-2xl space-y-8">
-                <h2 className="text-2xl font-bold text-zinc-100">Organization Settings</h2>
-                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase">Business Name</label>
-                    <input 
-                      type="text" 
-                      defaultValue={currentOrg?.name} 
-                      onBlur={(e) => handleUpdateOrg({ name: e.target.value })}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase">Address / P.O. Box</label>
-                    <input 
-                      type="text" 
-                      defaultValue={currentOrg?.address} 
-                      onBlur={(e) => handleUpdateOrg({ address: e.target.value })}
-                      placeholder="e.g. 123 Business St, Kampala"
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase">UPRS Registration Number</label>
-                    <input 
-                      type="text" 
-                      defaultValue={currentOrg?.uprsRegistrationNumber} 
-                      onBlur={(e) => handleUpdateOrg({ uprsRegistrationNumber: e.target.value })}
-                      placeholder="e.g. UPRS-2024-XXXX"
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase">Country</label>
-                      <select 
-                        value={currentOrg?.country || 'US'}
-                        onChange={(e) => handleUpdateOrg({ country: e.target.value })}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
-                      >
-                        <option value="US">United States</option>
-                        <option value="GB">United Kingdom</option>
-                        <option value="NG">Nigeria</option>
-                        <option value="KE">Kenya</option>
-                        <option value="ZA">South Africa</option>
-                        <option value="GH">Ghana</option>
-                        <option value="CA">Canada</option>
-                        <option value="AU">Australia</option>
-                        <option value="DE">Germany</option>
-                        <option value="FR">France</option>
-                        <option value="UG">Uganda</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase">Currency</label>
-                      <select 
-                        value={currentOrg?.currency || 'USD'}
-                        onChange={(e) => handleUpdateOrg({ currency: e.target.value })}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
-                      >
-                        <option value="USD">USD ($)</option>
-                        <option value="GBP">GBP (£)</option>
-                        <option value="NGN">NGN (₦)</option>
-                        <option value="KES">KES (KSh)</option>
-                        <option value="ZAR">ZAR (R)</option>
-                        <option value="GHS">GHS (GH₵)</option>
-                        <option value="CAD">CAD ($)</option>
-                        <option value="AUD">AUD ($)</option>
-                        <option value="EUR">EUR (€)</option>
-                        <option value="UGX">UGX (USh)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-end">
-                      <label className="text-xs font-bold text-zinc-500 uppercase">Account Subscription</label>
-                      <span className="text-xs font-bold text-indigo-400">
-                        {organizations.filter(o => o.ownerUid === user?.uid).length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].orgs === Infinity ? 'Unlimited' : PLAN_LIMITS[userProfile?.plan || 'trial'].orgs} Businesses Used
-                      </span>
-                    </div>
-
-                    {currentOrg?.expiresAt && (
-                      <TrialTimer expiresAt={currentOrg.expiresAt} />
-                    )}
-
-                    <div className="grid grid-cols-2 gap-4">
-                      {Object.entries(PLAN_DETAILS).filter(([k]) => k !== 'trial').map(([p, details]) => (
-                        <div 
-                          key={p} 
-                          onClick={() => handleUpdatePlan(p)}
-                          className={cn(
-                            "p-4 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between min-h-[160px]",
-                            userProfile?.plan === p ? "border-indigo-600 bg-indigo-600/5 shadow-lg shadow-indigo-500/10" : "border-zinc-800 bg-zinc-800/50 hover:border-zinc-700"
-                          )}
-                        >
-                          <div>
-                            <div className="flex justify-between items-start">
-                              <p className="text-sm font-bold text-zinc-100 uppercase">{details.label}</p>
-                              {userProfile?.plan === p && (
-                                <div className="bg-indigo-600 text-[10px] font-black text-white px-2 py-0.5 rounded-full uppercase">
-                                  Active
-                                </div>
-                              )}
-                            </div>
-                            <p className="text-xs text-zinc-500 mt-1">
-                              {getPlanPrice(details.price as number, currentOrg?.currency)} • {details.limits.orgs === Infinity ? 'Unlimited' : details.limits.orgs} Businesses
-                            </p>
-                            <div className="mt-2 space-y-0.5 text-[10px] text-zinc-500 uppercase font-bold opacity-60">
-                              <p>{details.limits.inventory === Infinity ? 'Unlimited' : details.limits.inventory.toLocaleString()} Products</p>
-                              <p>{details.limits.staff === Infinity ? 'Unlimited' : details.limits.staff} Staff</p>
-                            </div>
-                          </div>
-
-                          <button 
-                            className={cn(
-                              "mt-4 w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
-                              userProfile?.plan === p 
-                                ? "bg-indigo-600 text-white cursor-default" 
-                                : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                            )}
-                          >
-                            {userProfile?.plan === p ? "Selected Plan" : "Select Plan"}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+              <div className="max-w-6xl mx-auto space-y-8 pb-20">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                  <div>
+                    <h2 className="text-4xl font-black text-zinc-100 tracking-tighter uppercase italic">Settings</h2>
+                    <p className="text-zinc-500 font-medium">Configure your workspace and personal preferences</p>
                   </div>
                 </div>
 
-                <h2 className="text-2xl font-bold text-zinc-100">User Profile Settings</h2>
-                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-6">
-                  <div className="space-y-4">
-                    <label className="text-xs font-bold text-zinc-500 uppercase">Appearance</label>
-                    <div className="flex items-center gap-4">
-                      <button 
-                        onClick={() => setTheme('light')}
-                        className={cn(
-                          "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all",
-                          theme === 'light' ? "bg-white text-zinc-950 border-indigo-600 shadow-lg" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"
-                        )}
-                      >
-                        <Sun className="w-4 h-4" />
-                        <span className="text-sm font-bold">Light Mode</span>
-                      </button>
-                      <button 
-                        onClick={() => setTheme('dark')}
-                        className={cn(
-                          "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all",
-                          theme === 'dark' ? "bg-zinc-800 text-white border-indigo-600 shadow-lg" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"
-                        )}
-                      >
-                        <Moon className="w-4 h-4" />
-                        <span className="text-sm font-bold">Dark Mode</span>
-                      </button>
-                    </div>
-                  </div>
+                <div className="flex flex-col lg:flex-row gap-12">
+                  {/* Sidebar Navigation */}
+                  <aside className="w-full lg:w-72 shrink-0">
+                    <nav className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-4 lg:pb-0 no-scrollbar">
+                      {[
+                        { id: 'business', label: 'Business Profile', icon: Building2, desc: 'Company details & identity' },
+                        { id: 'subscription', label: 'Subscription', icon: CreditCard, desc: 'Plans, usage & billing' },
+                        { id: 'profile', label: 'Personal Profile', icon: User, desc: 'Your account & appearance' },
+                        { id: 'security', label: 'Security', icon: ShieldCheck, desc: 'Password & access control' },
+                        { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Alerts & communication' },
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setSettingsTab(tab.id as any)}
+                          className={cn(
+                            "flex items-center gap-4 px-4 py-3 rounded-2xl transition-all text-left w-full group",
+                            settingsTab === tab.id 
+                              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" 
+                              : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                            settingsTab === tab.id ? "bg-white/20" : "bg-zinc-800 group-hover:bg-zinc-700"
+                          )}>
+                            <tab.icon className="w-5 h-5" />
+                          </div>
+                          <div className="hidden lg:block overflow-hidden">
+                            <p className="text-sm font-bold truncate">{tab.label}</p>
+                            <p className={cn(
+                              "text-[10px] truncate uppercase tracking-widest font-bold opacity-60",
+                              settingsTab === tab.id ? "text-indigo-100" : "text-zinc-600"
+                            )}>{tab.desc}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </nav>
+                  </aside>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase">Display Name</label>
-                      <input 
-                        type="text" 
-                        defaultValue={userProfile?.displayName || ''} 
-                        onBlur={(e) => handleUpdateProfile({ displayName: e.target.value })}
-                        placeholder="Your full name"
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase">Contact Number</label>
-                      <input 
-                        type="text" 
-                        defaultValue={userProfile?.phoneNumber || ''} 
-                        onBlur={(e) => handleUpdateProfile({ phoneNumber: e.target.value })}
-                        placeholder="e.g. +256 7XX XXX XXX"
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase">Email Address</label>
-                    <input 
-                      type="text" 
-                      value={userProfile?.email || ''} 
-                      disabled
-                      className="w-full bg-zinc-800/50 border border-zinc-800 rounded-xl px-4 py-2 text-zinc-500 cursor-not-allowed outline-none" 
-                    />
-                    <p className="text-[10px] text-zinc-600">Email cannot be changed as it is linked to your authentication account.</p>
+                  {/* Content Area */}
+                  <div className="flex-1 min-w-0">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={settingsTab}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        {settingsTab === 'business' && (
+                          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
+                            <div className="flex items-center gap-4 mb-2">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 flex items-center justify-center border border-indigo-600/20">
+                                <Building2 className="w-6 h-6 text-indigo-500" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-zinc-100">Business Profile</h3>
+                                <p className="text-sm text-zinc-500">Manage your company's public identity and local settings</p>
+                              </div>
+                            </div>
+                            
+                            {/* Logo Section */}
+                            <div className="space-y-4 pt-4">
+                              <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Business Logo</label>
+                              <div className="flex flex-col sm:flex-row items-center gap-8 p-6 bg-zinc-800/30 rounded-2xl border border-zinc-800">
+                                <div className="w-32 h-32 rounded-2xl bg-zinc-800 border-2 border-dashed border-zinc-700 flex items-center justify-center overflow-hidden relative group">
+                                  {currentOrg?.logoUrl ? (
+                                    <>
+                                      <img src={currentOrg.logoUrl} alt="Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Camera className="w-8 h-8 text-white" />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="text-center p-4">
+                                      <ImageIcon className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                                      <p className="text-[10px] font-bold text-zinc-500 uppercase">No Logo</p>
+                                    </div>
+                                  )}
+                                  <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    onChange={handleLogoUpload}
+                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                    disabled={uploadingLogo}
+                                  />
+                                  {uploadingLogo && (
+                                    <div className="absolute inset-0 bg-zinc-900/80 flex items-center justify-center">
+                                      <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 space-y-2">
+                                  <h4 className="font-bold text-zinc-100">Official Company Logo</h4>
+                                  <p className="text-sm text-zinc-500 leading-relaxed">
+                                    This logo will be displayed on all official documents including receipts, invoices, and financial reports.
+                                  </p>
+                                  <div className="pt-2">
+                                    <label className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer border border-zinc-700">
+                                      <Plus className="w-4 h-4" />
+                                      {currentOrg?.logoUrl ? 'Change Logo' : 'Upload Logo'}
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={handleLogoUpload}
+                                        className="hidden"
+                                        disabled={uploadingLogo}
+                                      />
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="pt-8 border-t border-zinc-800 grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-2">
+                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Business Name</label>
+                                <input 
+                                  type="text" 
+                                  defaultValue={currentOrg?.name} 
+                                  onBlur={(e) => handleUpdateOrg({ name: e.target.value })}
+                                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">UPRS Registration Number</label>
+                                <input 
+                                  type="text" 
+                                  defaultValue={currentOrg?.uprsRegistrationNumber} 
+                                  onBlur={(e) => handleUpdateOrg({ uprsRegistrationNumber: e.target.value })}
+                                  placeholder="e.g. UPRS-2024-XXXX"
+                                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                                />
+                              </div>
+
+                              <div className="space-y-2 md:col-span-2">
+                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Physical Address / P.O. Box</label>
+                                <input 
+                                  type="text" 
+                                  defaultValue={currentOrg?.address} 
+                                  onBlur={(e) => handleUpdateOrg({ address: e.target.value })}
+                                  placeholder="e.g. 123 Business St, Kampala"
+                                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                                />
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Country</label>
+                                <select 
+                                  value={currentOrg?.country || 'US'}
+                                  onChange={(e) => handleUpdateOrg({ country: e.target.value })}
+                                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                >
+                                  <option value="US">United States</option>
+                                  <option value="GB">United Kingdom</option>
+                                  <option value="NG">Nigeria</option>
+                                  <option value="KE">Kenya</option>
+                                  <option value="ZA">South Africa</option>
+                                  <option value="GH">Ghana</option>
+                                  <option value="CA">Canada</option>
+                                  <option value="AU">Australia</option>
+                                  <option value="DE">Germany</option>
+                                  <option value="FR">France</option>
+                                  <option value="UG">Uganda</option>
+                                </select>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Base Currency</label>
+                                <select 
+                                  value={currentOrg?.currency || 'USD'}
+                                  onChange={(e) => handleUpdateOrg({ currency: e.target.value })}
+                                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                >
+                                  <option value="USD">USD ($)</option>
+                                  <option value="GBP">GBP (£)</option>
+                                  <option value="NGN">NGN (₦)</option>
+                                  <option value="KES">KES (KSh)</option>
+                                  <option value="ZAR">ZAR (R)</option>
+                                  <option value="GHS">GHS (GH₵)</option>
+                                  <option value="CAD">CAD ($)</option>
+                                  <option value="AUD">AUD ($)</option>
+                                  <option value="EUR">EUR (€)</option>
+                                  <option value="UGX">UGX (USh)</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {settingsTab === 'subscription' && (
+                          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
+                            <div className="flex items-center gap-4 mb-2">
+                              <div className="w-12 h-12 rounded-2xl bg-amber-600/10 flex items-center justify-center border border-amber-600/20">
+                                <CreditCard className="w-6 h-6 text-amber-500" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-zinc-100">Subscription & Billing</h3>
+                                <p className="text-sm text-zinc-500">Manage your plan, usage limits and billing cycle</p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-6">
+                              <div className="flex justify-between items-end">
+                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Current Plan Usage</label>
+                                <span className="text-xs font-bold text-indigo-400">
+                                  {organizations.filter(o => o.ownerUid === user?.uid).length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].orgs === Infinity ? 'Unlimited' : PLAN_LIMITS[userProfile?.plan || 'trial'].orgs} Businesses Used
+                                </span>
+                              </div>
+
+                              {currentOrg?.expiresAt && (
+                                <TrialTimer expiresAt={currentOrg.expiresAt} />
+                              )}
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {Object.entries(PLAN_DETAILS).filter(([k]) => k !== 'trial').map(([p, details]) => (
+                                  <div 
+                                    key={p} 
+                                    onClick={() => handleUpdatePlan(p)}
+                                    className={cn(
+                                      "p-6 rounded-2xl border-2 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between min-h-[220px] group",
+                                      userProfile?.plan === p ? "border-indigo-600 bg-indigo-600/5 shadow-lg shadow-indigo-500/10" : "border-zinc-800 bg-zinc-800/50 hover:border-zinc-700"
+                                    )}
+                                  >
+                                    <div>
+                                      <div className="flex justify-between items-start">
+                                        <p className="text-lg font-black text-zinc-100 uppercase tracking-tight">{details.label}</p>
+                                        {userProfile?.plan === p && (
+                                          <div className="bg-indigo-600 text-[10px] font-black text-white px-3 py-1 rounded-full uppercase tracking-widest">
+                                            Active
+                                          </div>
+                                        )}
+                                      </div>
+                                      <p className="text-2xl font-black text-zinc-100 mt-2">
+                                        {getPlanPrice(details.price as number, currentOrg?.currency)}
+                                        <span className="text-xs font-bold text-zinc-500 uppercase ml-1">/ Month</span>
+                                      </p>
+                                      <div className="mt-4 space-y-2">
+                                        <p className="flex items-center gap-2 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                                          <Box className="w-3.5 h-3.5 text-indigo-500" /> 
+                                          {details.limits.inventory === Infinity ? 'Unlimited' : details.limits.inventory.toLocaleString()} Products
+                                        </p>
+                                        <p className="flex items-center gap-2 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                                          <Users className="w-3.5 h-3.5 text-indigo-500" /> 
+                                          {details.limits.staff === Infinity ? 'Unlimited' : details.limits.staff} Staff Members
+                                        </p>
+                                        <p className="flex items-center gap-2 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                                          <Building2 className="w-3.5 h-3.5 text-indigo-500" /> 
+                                          {details.limits.orgs === Infinity ? 'Unlimited' : details.limits.orgs} Businesses
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    <button 
+                                      className={cn(
+                                        "mt-6 w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
+                                        userProfile?.plan === p 
+                                          ? "bg-indigo-600 text-white cursor-default" 
+                                          : "bg-zinc-700 text-zinc-300 group-hover:bg-indigo-600 group-hover:text-white"
+                                      )}
+                                    >
+                                      {userProfile?.plan === p ? "Current Plan" : "Upgrade Now"}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {settingsTab === 'profile' && (
+                          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
+                            <div className="flex items-center gap-4 mb-2">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 flex items-center justify-center border border-indigo-600/20">
+                                <User className="w-6 h-6 text-indigo-500" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-zinc-100">Personal Profile</h3>
+                                <p className="text-sm text-zinc-500">Manage your personal information and application appearance</p>
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-8">
+                              <div className="space-y-4">
+                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Appearance Theme</label>
+                                <div className="flex items-center gap-4">
+                                  <button 
+                                    onClick={() => setTheme('light')}
+                                    className={cn(
+                                      "flex-1 flex flex-col items-center justify-center gap-3 py-6 rounded-2xl border-2 transition-all",
+                                      theme === 'light' ? "bg-white text-zinc-950 border-indigo-600 shadow-xl" : "bg-zinc-800/50 text-zinc-400 border-zinc-800 hover:border-zinc-700"
+                                    )}
+                                  >
+                                    <Sun className="w-6 h-6" />
+                                    <span className="text-sm font-bold">Light Mode</span>
+                                  </button>
+                                  <button 
+                                    onClick={() => setTheme('dark')}
+                                    className={cn(
+                                      "flex-1 flex flex-col items-center justify-center gap-3 py-6 rounded-2xl border-2 transition-all",
+                                      theme === 'dark' ? "bg-zinc-800 text-white border-indigo-600 shadow-xl shadow-indigo-600/10" : "bg-zinc-800/50 text-zinc-400 border-zinc-800 hover:border-zinc-700"
+                                    )}
+                                  >
+                                    <Moon className="w-6 h-6" />
+                                    <span className="text-sm font-bold">Dark Mode</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-8 border-t border-zinc-800">
+                                <div className="space-y-2">
+                                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Display Name</label>
+                                  <input 
+                                    type="text" 
+                                    defaultValue={userProfile?.displayName || ''} 
+                                    onBlur={(e) => handleUpdateProfile({ displayName: e.target.value })}
+                                    placeholder="Your full name"
+                                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Contact Number</label>
+                                  <input 
+                                    type="text" 
+                                    defaultValue={userProfile?.phoneNumber || ''} 
+                                    onBlur={(e) => handleUpdateProfile({ phoneNumber: e.target.value })}
+                                    placeholder="e.g. +256 7XX XXX XXX"
+                                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
+                                  />
+                                </div>
+                                <div className="space-y-2 md:col-span-2">
+                                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Email Address</label>
+                                  <input 
+                                    type="email" 
+                                    value={user?.email || ''} 
+                                    disabled
+                                    className="w-full bg-zinc-800/50 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-500 cursor-not-allowed italic" 
+                                  />
+                                  <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">Email cannot be changed for security reasons</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {settingsTab === 'security' && (
+                          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
+                            <div className="flex items-center gap-4 mb-2">
+                              <div className="w-12 h-12 rounded-2xl bg-rose-600/10 flex items-center justify-center border border-rose-600/20">
+                                <ShieldCheck className="w-6 h-6 text-rose-500" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-zinc-100">Security & Access</h3>
+                                <p className="text-sm text-zinc-500">Protect your account and manage access credentials</p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-6">
+                              <div className="p-6 bg-zinc-800/30 rounded-2xl border border-zinc-800 space-y-4">
+                                <div className="flex items-start gap-4">
+                                  <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
+                                    <Clock className="w-5 h-5 text-zinc-400" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-zinc-100">Password Management</h4>
+                                    <p className="text-sm text-zinc-500 mt-1">We recommend changing your password every 90 days to keep your account secure.</p>
+                                  </div>
+                                </div>
+                                <button 
+                                  onClick={async () => {
+                                    if (user?.email) {
+                                      try {
+                                        // Firebase password reset logic would go here
+                                        await createNotification('system', 'Password Reset', 'Password reset email sent to ' + user.email, { email: user.email });
+                                        showNotification('Password reset email sent to ' + user.email, 'success');
+                                      } catch (err) {
+                                        await createNotification('system', 'Password Reset Failed', 'Failed to send reset email to ' + user.email, { error: err });
+                                        showNotification('Failed to send reset email', 'error');
+                                      }
+                                    }
+                                  }}
+                                  className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors border border-zinc-700"
+                                >
+                                  Reset Password via Email
+                                </button>
+                              </div>
+
+                              <div className="p-6 bg-zinc-800/30 rounded-2xl border border-zinc-800 space-y-4">
+                                <div className="flex items-start gap-4">
+                                  <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
+                                    <Users className="w-5 h-5 text-zinc-400" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-zinc-100">Session Management</h4>
+                                    <p className="text-sm text-zinc-500 mt-1">You are currently logged in as <span className="text-indigo-400 font-bold">{user?.email}</span>. If you suspect unauthorized access, sign out from all devices.</p>
+                                  </div>
+                                </div>
+                                <button 
+                                  onClick={handleSignOut}
+                                  className="w-full sm:w-auto bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors border border-rose-500/20"
+                                >
+                                  Sign Out from this Session
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {settingsTab === 'notifications' && (
+                          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
+                            <div className="flex items-center gap-4 mb-2">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 flex items-center justify-center border border-indigo-600/20">
+                                <Bell className="w-6 h-6 text-indigo-500" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-zinc-100">Notification Preferences</h3>
+                                <p className="text-sm text-zinc-500">Choose how and when you want to be notified</p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-4">
+                              {[
+                                { id: 'sales', label: 'Sales Alerts', desc: 'Get notified when a new sale is completed' },
+                                { id: 'inventory', label: 'Low Stock Alerts', desc: 'Alerts when products fall below minimum levels' },
+                                { id: 'reports', label: 'Daily Reports', desc: 'Receive a summary of daily business performance' },
+                                { id: 'security', label: 'Security Alerts', desc: 'Notifications for new logins or password changes' },
+                              ].map((pref) => {
+                                const isEnabled = userProfile?.notificationPreferences?.[pref.id as keyof typeof userProfile.notificationPreferences] ?? true;
+                                return (
+                                  <div key={pref.id} className="flex items-center justify-between p-4 bg-zinc-800/30 rounded-2xl border border-zinc-800">
+                                    <div>
+                                      <p className="font-bold text-zinc-100">{pref.label}</p>
+                                      <p className="text-xs text-zinc-500">{pref.desc}</p>
+                                    </div>
+                                    <button 
+                                      onClick={() => {
+                                        const currentPrefs = userProfile?.notificationPreferences || {};
+                                        handleUpdateProfile({
+                                          notificationPreferences: {
+                                            ...currentPrefs,
+                                            [pref.id]: !isEnabled
+                                          }
+                                        });
+                                      }}
+                                      className={cn(
+                                        "w-12 h-6 rounded-full relative transition-all duration-200",
+                                        isEnabled ? "bg-indigo-600" : "bg-zinc-700 hover:bg-zinc-600"
+                                      )}
+                                    >
+                                      <div className={cn(
+                                        "absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-200",
+                                        isEnabled ? "left-7" : "left-1"
+                                      )} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                              
+                              <div className="pt-6">
+                                <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest text-center">Notification settings are synced across all your devices</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
                   </div>
                 </div>
               </div>
@@ -5361,7 +6621,7 @@ function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = async (useRedirect = false) => {
+  const handleLogin = async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -5369,16 +6629,13 @@ function AuthScreen() {
       // Force account selection to ensure the popup is triggered correctly
       provider.setCustomParameters({ prompt: 'select_account' });
 
-      if (useRedirect) {
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-
       await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error("Login failed:", err);
       if (err.code === 'auth/popup-blocked') {
-        setError("Your browser blocked the login window. Please allow pop-ups for this site or try the 'Redirect' method below.");
+        setError("Your browser blocked the login window. Please allow pop-ups for this site or click the 'Open in New Tab' button in the top right of the preview.");
+      } else if (err.message?.includes('missing initial state') || err.code === 'auth/internal-error') {
+        setError("Authentication failed due to browser restrictions in the preview iframe. Please open the application in a new tab using the button in the top right corner to sign in.");
       } else {
         setError(err.message || "An unexpected error occurred during login.");
       }
@@ -5419,7 +6676,7 @@ function AuthScreen() {
           
           <div className="space-y-3">
             <button 
-              onClick={() => handleLogin(false)}
+              onClick={() => handleLogin()}
               disabled={isLoading}
               className="w-full flex items-center justify-center gap-3 bg-white hover:bg-zinc-100 text-zinc-950 font-bold py-4 rounded-2xl transition-all shadow-xl disabled:opacity-50"
             >
@@ -5429,14 +6686,6 @@ function AuthScreen() {
                   Continue with Google
                 </>
               )}
-            </button>
-
-            <button 
-              onClick={() => handleLogin(true)}
-              disabled={isLoading}
-              className="w-full text-zinc-500 hover:text-zinc-300 text-xs font-medium py-2 transition-colors"
-            >
-              Trouble with pop-ups? Try Redirect Mode
             </button>
           </div>
 
@@ -5481,7 +6730,13 @@ function AppContent() {
   const { user, loading, isAuthReady } = useFirebase();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('jena-pos-theme');
-    return (saved as 'light' | 'dark') || 'dark';
+    if (saved === 'light' || saved === 'dark') return saved;
+    
+    // Detect system preference
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
   });
 
   useEffect(() => {

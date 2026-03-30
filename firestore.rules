@@ -55,13 +55,15 @@ service cloud.firestore {
     // Domain Validators
     // ===============================================================
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt']) &&
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'phoneNumber', 'plan', 'notificationPreferences', 'createdAt', 'updatedAt']) &&
              data.uid is string && data.email is string &&
-             data.uid == request.auth.uid;
+             data.uid == request.auth.uid &&
+             (!('plan' in data) || data.plan in ['trial', 'basic', 'essentials', 'plus', 'advanced']) &&
+             (!('notificationPreferences' in data) || data.notificationPreferences is map);
     }
 
     function isValidOrganization(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt']) &&
+      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'logoUrl', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt']) &&
              data.id is string &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.ownerUid is string &&
@@ -69,6 +71,7 @@ service cloud.firestore {
              (!('currency' in data) || data.currency is string) &&
              (!('address' in data) || data.address is string) &&
              (!('uprsRegistrationNumber' in data) || data.uprsRegistrationNumber is string) &&
+             (!('logoUrl' in data) || data.logoUrl is string) &&
              data.plan in ['trial', 'basic', 'essentials', 'plus', 'advanced'] &&
              data.subscriptionStatus is string &&
              data.createdAt is string &&
@@ -84,11 +87,12 @@ service cloud.firestore {
     }
 
     function isValidDamageRecord(data) {
-      return hasOnlyAllowedFields(['itemId', 'itemName', 'quantity', 'reason', 'imageUrl', 'date', 'reportedBy', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['itemId', 'itemName', 'quantity', 'reason', 'imageUrl', 'date', 'reportedBy', 'cost', 'createdAt', 'updatedAt']) &&
              data.itemId is string && data.itemName is string &&
              data.quantity is number && data.quantity > 0 &&
              data.date is string &&
-             (!('imageUrl' in data) || data.imageUrl is string);
+             (!('imageUrl' in data) || data.imageUrl is string) &&
+             (!('cost' in data) || data.cost is number);
     }
 
     function isValidTransaction(data) {
@@ -116,7 +120,7 @@ service cloud.firestore {
 
     function isValidNotification(data) {
       return hasOnlyAllowedFields(['type', 'title', 'message', 'timestamp', 'read', 'metadata', 'createdAt', 'updatedAt']) &&
-             data.type in ['sale', 'login', 'logout', 'system'] &&
+             data.type in ['sale', 'login', 'logout', 'system', 'inventory', 'damage', 'expense'] &&
              data.title is string && data.message is string &&
              data.timestamp is string &&
              (!('read' in data) || data.read is bool);
@@ -176,7 +180,7 @@ service cloud.firestore {
       allow read: if isStaff(orgId);
       allow create: if hasRole(orgId, ['admin', 'manager']) && isValidInventoryItem(request.resource.data);
       allow update: if isStaff(orgId);
-      allow delete: if hasRole(orgId, ['admin', 'manager']);
+      allow delete: if hasRole(orgId, ['admin']);
     }
 
     match /organizations/{orgId}/transactions/{txId} {
