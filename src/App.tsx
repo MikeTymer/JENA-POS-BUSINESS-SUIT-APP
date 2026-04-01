@@ -1983,6 +1983,27 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
                   * To change core business details, please contact support or use the "My Businesses" tab to edit the name.
                 </p>
               </div>
+
+              <div className="pt-8 border-t border-zinc-800 space-y-4">
+                <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Application</h4>
+                <div className="flex items-center justify-between p-4 bg-zinc-800/30 rounded-2xl border border-zinc-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-600/10 rounded-xl">
+                      <Download className="w-5 h-5 text-indigo-500" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-zinc-100">Offline Access</p>
+                      <p className="text-xs text-zinc-500">Download the app for offline use</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => window.open('https://median.co/share/bnkaoey#apk', '_blank')}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-4 py-2 rounded-xl text-xs font-bold transition-colors border border-zinc-700"
+                  >
+                    Download App
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -4629,9 +4650,17 @@ function HelpSection() {
             <p className="text-zinc-400 text-lg">Master your business with JENA POS v2.0</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-          <span className="text-emerald-500 text-xs font-bold uppercase tracking-widest">System Online & Updated</span>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => window.open('https://median.co/share/bnkaoey#apk', '_blank')}
+            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-6 py-3 rounded-2xl transition-all border border-zinc-700 font-bold shadow-lg"
+          >
+            <Download className="w-5 h-5" /> Download App
+          </button>
+          <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            <span className="text-emerald-500 text-xs font-bold uppercase tracking-widest">System Online & Updated</span>
+          </div>
         </div>
       </div>
 
