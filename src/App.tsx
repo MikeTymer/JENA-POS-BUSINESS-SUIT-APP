@@ -4,7 +4,10 @@ import {
   signInWithPopup, 
   signInWithRedirect,
   GoogleAuthProvider, 
-  signOut 
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  signOut,
+  getAdditionalUserInfo
 } from 'firebase/auth';
 import { 
   LayoutDashboard, 
@@ -6510,15 +6513,22 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                                 </div>
                                 <button 
                                   onClick={async () => {
-                                    if (user?.email) {
-                                      try {
-                                        // Firebase password reset logic would go here
-                                        await createNotification('system', 'Password Reset', 'Password reset email sent to ' + user.email, { email: user.email });
-                                        showNotification('Password reset email sent to ' + user.email, 'success');
-                                      } catch (err) {
-                                        await createNotification('system', 'Password Reset Failed', 'Failed to send reset email to ' + user.email, { error: err });
-                                        showNotification('Failed to send reset email', 'error');
+                                    if (!user?.email) return;
+                                    try {
+                                      console.log('Attempting to send password reset email to:', user.email);
+                                      await sendPasswordResetEmail(auth, user.email);
+                                      showNotification('Password reset email sent! Please check your inbox.', 'success');
+                                      await createNotification('system', 'Password Reset', 'Password reset email sent to ' + user.email, { email: user.email });
+                                    } catch (err: any) {
+                                      console.error("Password reset error:", err);
+                                      let errorMessage = 'Failed to send reset email. Please try again later.';
+                                      if (err.code === 'auth/user-not-found') {
+                                        errorMessage = 'No user found with this email address.';
+                                      } else if (err.code === 'auth/too-many-requests') {
+                                        errorMessage = 'Too many requests. Please try again later.';
                                       }
+                                      showNotification(errorMessage, 'error');
+                                      await createNotification('system', 'Password Reset Failed', 'Failed to send reset email to ' + user.email, { error: err.message });
                                     }
                                   }}
                                   className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors border border-zinc-700"
@@ -6649,16 +6659,35 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const handleLogin = async () => {
     setIsLoading(true);
     setError(null);
+    setMessage(null);
     try {
       const provider = new GoogleAuthProvider();
       // Force account selection to ensure the popup is triggered correctly
       provider.setCustomParameters({ prompt: 'select_account' });
 
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const additionalInfo = getAdditionalUserInfo(result);
+      
+      // If this is a new user or email not verified, send verification email
+      if (result.user && !result.user.emailVerified) {
+        try {
+          await sendEmailVerification(result.user);
+          setMessage("A verification email has been sent to your inbox. Please verify your email to access all features.");
+        } catch (verifyErr: any) {
+          console.error("Verification email failed:", verifyErr);
+          // Don't block login if verification email fails (might be rate limited)
+          if (additionalInfo?.isNewUser) {
+            setMessage("Welcome! Please verify your email later to access all features.");
+          }
+        }
+      } else if (additionalInfo?.isNewUser) {
+        setMessage("Welcome to JENA POS! Your account has been created.");
+      }
     } catch (err: any) {
       console.error("Login failed:", err);
       if (err.code === 'auth/popup-blocked') {
@@ -6700,6 +6729,13 @@ function AuthScreen() {
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-4 rounded-xl text-left flex gap-3">
               <div className="flex-shrink-0 mt-0.5">⚠️</div>
               <p>{error}</p>
+            </div>
+          )}
+
+          {message && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-4 rounded-xl text-left flex gap-3">
+              <div className="flex-shrink-0 mt-0.5">✨</div>
+              <p>{message}</p>
             </div>
           )}
           
