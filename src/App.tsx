@@ -1750,11 +1750,6 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
                           {org.plan}
                         </span>
                       </div>
-                      {org.expiresAt && (
-                        <div className="mt-2 scale-75 origin-left">
-                          <TrialTimer expiresAt={org.expiresAt} />
-                        </div>
-                      )}
                     </div>
                     <button 
                       onClick={() => setDeletingOrgId(org.id)}
@@ -4814,46 +4809,6 @@ function getPlanPrice(ugxPrice: number, currency?: string) {
   return `${formatCurrency(convertedAmount, effectiveCurrency)}/mo`;
 }
 
-function TrialTimer({ expiresAt }: { expiresAt: string }) {
-  const [timeLeft, setTimeLeft] = useState('');
-
-  useEffect(() => {
-    const updateTimer = () => {
-      const now = new Date();
-      const expiry = new Date(expiresAt);
-      const diff = expiry.getTime() - now.getTime();
-
-      if (diff <= 0) {
-        setTimeLeft('Expired');
-        return;
-      }
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-      setTimeLeft(`${days}d ${hours}h ${minutes}m`);
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 60000); // Update every minute
-    return () => clearInterval(interval);
-  }, [expiresAt]);
-
-  return (
-    <div className="bg-amber-600/10 border border-amber-600/20 p-4 rounded-xl flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <History className="w-5 h-5 text-amber-500" />
-        <div>
-          <p className="text-sm font-bold text-amber-500 uppercase tracking-wider">Trial Period</p>
-          <p className="text-xs text-zinc-400">Your free profile expires in:</p>
-        </div>
-      </div>
-      <p className="text-lg font-black text-amber-500 font-mono">{timeLeft}</p>
-    </div>
-  );
-}
-
 interface Notification {
   id: string;
   type: 'sale' | 'login' | 'logout' | 'system';
@@ -5360,7 +5315,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'business' | 'subscription' | 'profile' | 'security' | 'notifications'>(() => {
+  const [settingsTab, setSettingsTab] = useState<'business' | 'profile' | 'security' | 'notifications'>(() => {
     const saved = localStorage.getItem('settingsTab');
     return (saved as any) || 'business';
   });
@@ -5392,8 +5347,6 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     canViewAnalytics: isManager,
     canManageNotifications: isManager,
   };
-
-  const isExpired = currentOrg?.expiresAt && new Date(currentOrg.expiresAt) < new Date() && !isSuperAdmin;
 
   const getPlanLimits = (plan: string | undefined) => {
     const p = (plan || 'trial').toLowerCase() as keyof typeof PLAN_LIMITS;
@@ -6075,54 +6028,12 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         </header>
 
         <main className="flex-1 p-6 lg:p-10 overflow-y-auto custom-scrollbar">
-          {isExpired && activeTab !== 'settings' ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center space-y-6 max-w-2xl mx-auto">
-              <div className="w-24 h-24 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
-                <History className="w-12 h-12 text-rose-500" />
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-3xl font-black text-zinc-100 uppercase tracking-tighter">Subscription Expired</h2>
-                <p className="text-zinc-400 text-lg">Your trial or subscription period for <span className="text-zinc-100 font-bold">{currentOrg?.name}</span> has ended. Please renew your plan to continue using JENA POS.</p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
-                <button 
-                  onClick={() => setActiveTab('settings')}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-indigo-600/20"
-                >
-                  Renew Subscription
-                </button>
-                <button 
-                  onClick={handleSignOut}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-4 rounded-2xl transition-all uppercase tracking-widest"
-                >
-                  Sign Out
-                </button>
-              </div>
-              <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl w-full text-left">
-                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Why is my account locked?</p>
-                <ul className="space-y-3">
-                  <li className="flex items-start gap-3 text-sm text-zinc-400">
-                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
-                    <span>Your 14-day trial period has concluded.</span>
-                  </li>
-                  <li className="flex items-start gap-3 text-sm text-zinc-400">
-                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
-                    <span>Your monthly subscription payment is overdue.</span>
-                  </li>
-                  <li className="flex items-start gap-3 text-sm text-zinc-400">
-                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
-                    <span>Access to inventory, sales, and reports is restricted until renewal.</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          ) : (
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
-            >
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
               {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} setHighlightedTxId={setHighlightedTxId} isAdmin={isAdmin} isManager={isManager} />}
               {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} createNotification={createNotification} userProfile={userProfile} permissions={permissions} />}
               {activeTab === 'inventory' && <Inventory showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedItemId={highlightedItemId} setHighlightedItemId={setHighlightedItemId} />}
@@ -6149,7 +6060,6 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                     <nav className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-4 lg:pb-0 no-scrollbar">
                       {[
                         { id: 'business', label: 'Business Profile', icon: Building2, desc: 'Company details & identity' },
-                        { id: 'subscription', label: 'Subscription', icon: CreditCard, desc: 'Plans, usage & billing' },
                         { id: 'profile', label: 'Personal Profile', icon: User, desc: 'Your account & appearance' },
                         { id: 'security', label: 'Security', icon: ShieldCheck, desc: 'Password & access control' },
                         { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Alerts & communication' },
@@ -6328,86 +6238,6 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                                   <option value="EUR">EUR (€)</option>
                                   <option value="UGX">UGX (USh)</option>
                                 </select>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {settingsTab === 'subscription' && (
-                          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
-                            <div className="flex items-center gap-4 mb-2">
-                              <div className="w-12 h-12 rounded-2xl bg-amber-600/10 flex items-center justify-center border border-amber-600/20">
-                                <CreditCard className="w-6 h-6 text-amber-500" />
-                              </div>
-                              <div>
-                                <h3 className="text-xl font-bold text-zinc-100">Subscription & Billing</h3>
-                                <p className="text-sm text-zinc-500">Manage your plan, usage limits and billing cycle</p>
-                              </div>
-                            </div>
-
-                            <div className="space-y-6">
-                              <div className="flex justify-between items-end">
-                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Current Plan Usage</label>
-                                <span className="text-xs font-bold text-indigo-400">
-                                  {organizations.filter(o => o.ownerUid === user?.uid).length} / {PLAN_LIMITS[userProfile?.plan || 'trial'].orgs === Infinity ? 'Unlimited' : PLAN_LIMITS[userProfile?.plan || 'trial'].orgs} Businesses Used
-                                </span>
-                              </div>
-
-                              {currentOrg?.expiresAt && (
-                                <TrialTimer expiresAt={currentOrg.expiresAt} />
-                              )}
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {Object.entries(PLAN_DETAILS).filter(([k]) => k !== 'trial').map(([p, details]) => (
-                                  <div 
-                                    key={p} 
-                                    onClick={() => handleUpdatePlan(p)}
-                                    className={cn(
-                                      "p-6 rounded-2xl border-2 transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between min-h-[220px] group",
-                                      userProfile?.plan === p ? "border-indigo-600 bg-indigo-600/5 shadow-lg shadow-indigo-500/10" : "border-zinc-800 bg-zinc-800/50 hover:border-zinc-700"
-                                    )}
-                                  >
-                                    <div>
-                                      <div className="flex justify-between items-start">
-                                        <p className="text-lg font-black text-zinc-100 uppercase tracking-tight">{details.label}</p>
-                                        {userProfile?.plan === p && (
-                                          <div className="bg-indigo-600 text-[10px] font-black text-white px-3 py-1 rounded-full uppercase tracking-widest">
-                                            Active
-                                          </div>
-                                        )}
-                                      </div>
-                                      <p className="text-2xl font-black text-zinc-100 mt-2">
-                                        {getPlanPrice(details.price as number, currentOrg?.currency)}
-                                        <span className="text-xs font-bold text-zinc-500 uppercase ml-1">/ Month</span>
-                                      </p>
-                                      <div className="mt-4 space-y-2">
-                                        <p className="flex items-center gap-2 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                                          <Box className="w-3.5 h-3.5 text-indigo-500" /> 
-                                          {details.limits.inventory === Infinity ? 'Unlimited' : details.limits.inventory.toLocaleString()} Products
-                                        </p>
-                                        <p className="flex items-center gap-2 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                                          <Users className="w-3.5 h-3.5 text-indigo-500" /> 
-                                          {details.limits.staff === Infinity ? 'Unlimited' : details.limits.staff} Staff Members
-                                        </p>
-                                        <p className="flex items-center gap-2 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                                          <Building2 className="w-3.5 h-3.5 text-indigo-500" /> 
-                                          {details.limits.orgs === Infinity ? 'Unlimited' : details.limits.orgs} Businesses
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    <button 
-                                      className={cn(
-                                        "mt-6 w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
-                                        userProfile?.plan === p 
-                                          ? "bg-indigo-600 text-white cursor-default" 
-                                          : "bg-zinc-700 text-zinc-300 group-hover:bg-indigo-600 group-hover:text-white"
-                                      )}
-                                    >
-                                      {userProfile?.plan === p ? "Current Plan" : "Upgrade Now"}
-                                    </button>
-                                  </div>
-                                ))}
                               </div>
                             </div>
                           </div>
@@ -6621,7 +6451,6 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               </div>
             )}
           </motion.div>
-        )}
 
         <footer className="mt-auto pt-10 pb-6 border-t border-zinc-800/50">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -6660,15 +6489,22 @@ function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showRedirectOption, setShowRedirectOption] = useState(false);
 
-  const handleLogin = async () => {
+  const handleLogin = async (useRedirect = false) => {
     setIsLoading(true);
     setError(null);
     setMessage(null);
+    setShowRedirectOption(false);
     try {
       const provider = new GoogleAuthProvider();
       // Force account selection to ensure the popup is triggered correctly
       provider.setCustomParameters({ prompt: 'select_account' });
+
+      if (useRedirect) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
 
       const result = await signInWithPopup(auth, provider);
       const additionalInfo = getAdditionalUserInfo(result);
@@ -6692,8 +6528,13 @@ function AuthScreen() {
       console.error("Login failed:", err);
       if (err.code === 'auth/popup-blocked') {
         setError("Your browser blocked the login window. Please allow pop-ups for this site or click the 'Open in New Tab' button in the top right of the preview.");
+        setShowRedirectOption(true);
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError("The login window was closed before completion. Please try again or use the redirect method.");
+        setShowRedirectOption(true);
       } else if (err.message?.includes('missing initial state') || err.code === 'auth/internal-error') {
         setError("Authentication failed due to browser restrictions in the preview iframe. Please open the application in a new tab using the button in the top right corner to sign in.");
+        setShowRedirectOption(true);
       } else {
         setError(err.message || "An unexpected error occurred during login.");
       }
@@ -6752,6 +6593,21 @@ function AuthScreen() {
                 </>
               )}
             </button>
+
+            {showRedirectOption && (
+              <button 
+                onClick={() => handleLogin(true)}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold py-4 rounded-2xl transition-all border border-zinc-700 disabled:opacity-50"
+              >
+                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                  <>
+                    <RefreshCw className="w-5 h-5" />
+                    Try Redirect Sign-in
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <div className="pt-4 flex items-center justify-center gap-6 text-zinc-600">
