@@ -3926,9 +3926,15 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input 
             type="text" 
-            placeholder="Search products by name or SKU..."
+            placeholder="Search products by name, SKU or scan barcode..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && filteredInventory.length === 1) {
+                addToCart(filteredInventory[0]);
+                setSearch('');
+              }
+            }}
             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl pl-12 pr-4 py-4 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
           />
         </div>
@@ -4642,8 +4648,8 @@ function HelpCard({ title, description, steps }: { title: string, description: s
 
 function HelpSection() {
   const { userProfile } = useFirebase();
-  // Using a consistent seed for the developer image
-  const developerImage = "https://picsum.photos/seed/sakwa-dev/400/400";
+  // Using the GitHub profile image
+  const developerImage = "https://github.com/MikeTymer.png";
 
   return (
     <div className="max-w-5xl space-y-12 pb-20">
@@ -4762,7 +4768,7 @@ function HelpSection() {
               JENA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.
             </p>
             <div className="flex flex-wrap gap-6 pt-4">
-              <a href="https://github.com/MichealSakwa" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-bold transition-colors">
+              <a href="https://github.com/MikeTymer" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-bold transition-colors">
                 <Github className="w-5 h-5" />
                 <span>GitHub Profile</span>
               </a>
