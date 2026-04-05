@@ -63,7 +63,7 @@ service cloud.firestore {
     }
 
     function isValidOrganization(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'logoUrl', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt']) &&
+      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'logoUrl', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt', 'isPaid', 'trialExpiresAt', 'referredBy']) &&
              data.id is string &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.ownerUid is string &&
@@ -76,7 +76,34 @@ service cloud.firestore {
              data.subscriptionStatus is string &&
              data.createdAt is string &&
              (!('updatedAt' in data) || data.updatedAt is string) &&
-             (!('expiresAt' in data) || data.expiresAt is string || data.expiresAt == null);
+             (!('expiresAt' in data) || data.expiresAt is string || data.expiresAt == null) &&
+             (!('isPaid' in data) || data.isPaid is bool) &&
+             (!('trialExpiresAt' in data) || data.trialExpiresAt is string) &&
+             (!('referredBy' in data) || data.referredBy is string);
+    }
+
+    function isValidAffiliate(data) {
+      return hasOnlyAllowedFields(['uid', 'affiliateCode', 'status', 'totalEarnings', 'unpaidEarnings', 'totalClicks', 'createdAt', 'updatedAt']) &&
+             data.uid is string &&
+             data.affiliateCode is string && data.affiliateCode.size() > 0 &&
+             data.status in ['active', 'pending', 'suspended'] &&
+             (!('totalEarnings' in data) || data.totalEarnings is number) &&
+             (!('unpaidEarnings' in data) || data.unpaidEarnings is number) &&
+             (!('totalClicks' in data) || data.totalClicks is number);
+    }
+
+    function isValidReferral(data) {
+      return hasOnlyAllowedFields(['id', 'affiliateUid', 'referredOrgId', 'referredUid', 'status', 'amountEarned', 'createdAt', 'paidAt', 'updatedAt']) &&
+             data.affiliateUid is string &&
+             data.referredOrgId is string &&
+             data.status in ['registered', 'paid', 'completed'];
+    }
+
+    function isValidPayment(data) {
+      return hasOnlyAllowedFields(['id', 'orgId', 'userId', 'amount', 'currency', 'status', 'createdAt', 'updatedAt']) &&
+             data.orgId is string && data.userId is string &&
+             data.amount is number && data.amount > 0 &&
+             data.status in ['pending', 'completed', 'failed'];
     }
 
     function isValidInventoryItem(data) {
@@ -214,6 +241,26 @@ service cloud.firestore {
       allow create: if isStaff(orgId);
       allow update: if hasRole(orgId, ['admin', 'manager']) && isValidNotification(request.resource.data);
       allow delete: if hasRole(orgId, ['admin']);
+    }
+
+    match /affiliates/{affiliateUid} {
+      allow read: if isOwner(affiliateUid);
+      allow create: if isOwner(affiliateUid) && isValidAffiliate(request.resource.data);
+      allow update: if (isAuthenticated() && isOwner(affiliateUid) && isValidAffiliate(request.resource.data)) || 
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks']) && 
+                       request.resource.data.totalClicks == resource.data.totalClicks + 1);
+    }
+
+    match /referrals/{referralId} {
+      allow read: if isAuthenticated() && (isSuperAdmin() || resource.data.affiliateUid == request.auth.uid);
+      allow create: if isAuthenticated(); // System creates this upon registration
+      allow update: if isSuperAdmin();
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (isSuperAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidPayment(request.resource.data);
+      allow update: if isSuperAdmin();
     }
   }
 }

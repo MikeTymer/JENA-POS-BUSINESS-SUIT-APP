@@ -26,6 +26,9 @@ export interface Organization {
   logoUrl?: string;
   plan: string;
   subscriptionStatus: string;
+  isPaid?: boolean;
+  trialExpiresAt?: string;
+  referredBy?: string;
   createdAt: any;
   expiresAt?: string;
 }

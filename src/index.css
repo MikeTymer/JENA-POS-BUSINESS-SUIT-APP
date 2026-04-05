@@ -17,7 +17,7 @@
 .light {
   /* Backgrounds - Soft Blue-Gray to reduce eye strain */
   --color-zinc-950: #f1f5f9; /* Main background - Slate 100 */
-  --color-zinc-900: #ffffff; /* Card background - White */
+  --color-zinc-900: #f8fafc; /* Card background - Slate 50 (Greyish White) */
   --color-zinc-800: #e2e8f0; /* Borders - Slate 200 */
   
   /* Text - Deep Navy Blue */

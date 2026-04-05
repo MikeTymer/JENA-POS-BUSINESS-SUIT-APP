@@ -46,6 +46,7 @@ import {
   FileUp,
   FileDown,
   AlertTriangle,
+  MousePointer2,
   Image as ImageIcon,
   Camera,
   History,
@@ -60,7 +61,9 @@ import {
   Github,
   Code2,
   ArrowLeft,
-  User
+  User,
+  Share2,
+  Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -4771,15 +4774,15 @@ function HelpSection() {
 
 const PLAN_LIMITS = {
   trial: { orgs: 1, inventory: 50, staff: Infinity },
-  basic: { orgs: 1, inventory: 200, staff: Infinity },
-  essentials: { orgs: 3, inventory: 1000, staff: Infinity },
-  plus: { orgs: 10, inventory: 2000, staff: Infinity },
+  basic: { orgs: 1, inventory: 500, staff: Infinity }, // One-time paid plan
+  essentials: { orgs: 3, inventory: 2000, staff: Infinity },
+  plus: { orgs: 10, inventory: 5000, staff: Infinity },
   advanced: { orgs: Infinity, inventory: 1000000, staff: Infinity }
 };
 
 const PLAN_DETAILS = {
   trial: { price: 0, limits: PLAN_LIMITS.trial, label: 'Trial' },
-  basic: { price: 0, limits: PLAN_LIMITS.basic, label: 'Basic' },
+  basic: { price: 10, limits: PLAN_LIMITS.basic, label: 'One-Time Access' },
   essentials: { price: 31500, limits: PLAN_LIMITS.essentials, label: 'Essentials' },
   plus: { price: 104500, limits: PLAN_LIMITS.plus, label: 'Plus' },
   advanced: { price: 250000, limits: PLAN_LIMITS.advanced, label: 'Advanced' }
@@ -5284,9 +5287,298 @@ function ProfitAnalytics() {
   );
 }
 
+function AffiliateView({ user, showNotification }: { user: any, showNotification: (m: string, t?: 'success' | 'error') => void }) {
+  const [affiliate, setAffiliate] = useState<any>(null);
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isJoining, setIsJoining] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchAffiliateData = async () => {
+      try {
+        const affiliateDoc = await getDoc(doc(db, 'affiliates', user.uid));
+        if (affiliateDoc.exists()) {
+          setAffiliate(affiliateDoc.data());
+          
+          const referralsSnap = await getDocs(query(collection(db, 'referrals'), where('affiliateUid', '==', user.uid)));
+          setReferrals(referralsSnap.docs.map(d => d.data()));
+        }
+      } catch (error) {
+        console.error('Error fetching affiliate data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAffiliateData();
+  }, [user]);
+
+  const handleJoinProgram = async () => {
+    if (!user) return;
+    setIsJoining(true);
+    try {
+      const affiliateCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const newAffiliate = {
+        uid: user.uid,
+        affiliateCode,
+        status: 'active',
+        totalEarnings: 0,
+        unpaidEarnings: 0,
+        createdAt: new Date().toISOString()
+      };
+      await setDocument('affiliates', user.uid, newAffiliate);
+      setAffiliate(newAffiliate);
+      showNotification('Successfully joined the affiliate program!');
+    } catch (error) {
+      console.error('Error joining affiliate program:', error);
+      showNotification('Failed to join the program.', 'error');
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const copyReferralLink = () => {
+    if (!affiliate) return;
+    const link = `${window.location.origin}?ref=${affiliate.affiliateCode}`;
+    navigator.clipboard.writeText(link);
+    showNotification('Referral link copied to clipboard!');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!affiliate) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 px-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 md:p-12 text-center space-y-8 shadow-2xl">
+          <div className="w-20 h-20 bg-indigo-600/10 rounded-2xl flex items-center justify-center mx-auto border border-indigo-600/20">
+            <Share2 className="w-10 h-10 text-indigo-500" />
+          </div>
+          <div className="space-y-4">
+            <h2 className="text-4xl font-black text-zinc-100 uppercase tracking-tighter">Join Our Affiliate Program</h2>
+            <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
+              Share JENA POS with your network and earn money for every business that signs up and makes their one-time payment.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+            <div className="p-6 bg-zinc-800/50 rounded-2xl border border-zinc-700/50">
+              <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center mb-4">
+                <Plus className="w-5 h-5 text-emerald-500" />
+              </div>
+              <h3 className="font-bold text-zinc-100 mb-2">1. Sign Up</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">Join the program with one click and get your unique referral code.</p>
+            </div>
+            <div className="p-6 bg-zinc-800/50 rounded-2xl border border-zinc-700/50">
+              <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center mb-4">
+                <Share2 className="w-5 h-5 text-blue-500" />
+              </div>
+              <h3 className="font-bold text-zinc-100 mb-2">2. Share Link</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">Share your referral link with business owners and managers.</p>
+            </div>
+            <div className="p-6 bg-zinc-800/50 rounded-2xl border border-zinc-700/50">
+              <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center mb-4">
+                <DollarSign className="w-5 h-5 text-amber-500" />
+              </div>
+              <h3 className="font-bold text-zinc-100 mb-2">3. Get Paid</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">Earn a commission for every referred user who completes their one-time payment.</p>
+            </div>
+          </div>
+          <button
+            onClick={handleJoinProgram}
+            disabled={isJoining}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 px-12 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-indigo-600/20 disabled:opacity-50"
+          >
+            {isJoining ? 'Joining...' : 'Become an Affiliate'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 pb-20">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-indigo-600/10 rounded-2xl">
+            <Share2 className="w-8 h-8 text-indigo-500" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold text-zinc-100">Affiliate Dashboard</h2>
+            <p className="text-zinc-400">Track your referrals and earnings</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 p-2 rounded-2xl">
+          <div className="px-4 py-2 bg-zinc-800 rounded-xl">
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Your Code</p>
+            <p className="text-lg font-black text-indigo-500 font-mono">{affiliate.affiliateCode}</p>
+          </div>
+          <button
+            onClick={copyReferralLink}
+            className="p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition-colors shadow-lg shadow-indigo-600/20"
+          >
+            <Copy className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2 bg-emerald-500/10 rounded-xl">
+              <DollarSign className="w-5 h-5 text-emerald-500" />
+            </div>
+            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Total Earned</span>
+          </div>
+          <p className="text-3xl font-black text-zinc-100">{formatCurrency(affiliate.totalEarnings, 'USD')}</p>
+          <p className="text-xs text-zinc-500 mt-1">Lifetime earnings</p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2 bg-amber-500/10 rounded-xl">
+              <Wallet className="w-5 h-5 text-amber-500" />
+            </div>
+            <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Unpaid Balance</span>
+          </div>
+          <p className="text-3xl font-black text-zinc-100">{formatCurrency(affiliate.unpaidEarnings, 'USD')}</p>
+          <p className="text-xs text-zinc-500 mt-1">Available for withdrawal</p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2 bg-blue-500/10 rounded-xl">
+              <Users className="w-5 h-5 text-blue-500" />
+            </div>
+            <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Total Referrals</span>
+          </div>
+          <p className="text-3xl font-black text-zinc-100">{referrals.length}</p>
+          <p className="text-xs text-zinc-500 mt-1">Registered businesses</p>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2 bg-indigo-500/10 rounded-xl">
+              <MousePointer2 className="w-5 h-5 text-indigo-500" />
+            </div>
+            <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Link Clicks</span>
+          </div>
+          <p className="text-3xl font-black text-zinc-100">{affiliate.totalClicks || 0}</p>
+          <p className="text-xs text-zinc-500 mt-1">Total visits via your link</p>
+        </div>
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+          <h3 className="text-lg font-bold text-zinc-100">Recent Referrals</h3>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Real-time tracking</span>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-zinc-800/50 border-b border-zinc-800">
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Date</th>
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Status</th>
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest text-right">Commission</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800">
+              {referrals.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-12 text-center text-zinc-500">No referrals yet. Start sharing your link!</td>
+                </tr>
+              ) : referrals.map((ref, idx) => (
+                <tr key={idx} className="hover:bg-zinc-800/30 transition-colors">
+                  <td className="px-6 py-4 text-sm text-zinc-400">{formatDate(ref.createdAt)}</td>
+                  <td className="px-6 py-4">
+                    <span className={cn(
+                      "px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest",
+                      ref.status === 'completed' ? "bg-emerald-500/10 text-emerald-500" :
+                      ref.status === 'paid' ? "bg-blue-500/10 text-blue-500" :
+                      "bg-zinc-500/10 text-zinc-500"
+                    )}>
+                      {ref.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-bold text-zinc-100 text-right">
+                    {formatCurrency(ref.amountEarned || 0, 'USD')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentRequired({ currentOrg, handleSignOut, showNotification, handlePayment, isProcessing }: { currentOrg: any, handleSignOut: () => void, showNotification: (m: string, t?: 'success' | 'error') => void, handlePayment: (method: 'card' | 'momo') => Promise<void>, isProcessing: boolean }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center space-y-6 max-w-2xl mx-auto">
+      <div className="w-24 h-24 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
+        <History className="w-12 h-12 text-rose-500" />
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-3xl font-black text-zinc-100 uppercase tracking-tighter">Trial Period Expired</h2>
+        <p className="text-zinc-400 text-lg">Your 3-month trial period for <span className="text-zinc-100 font-bold">{currentOrg?.name}</span> has ended. A one-time payment is required to continue using JENA POS.</p>
+      </div>
+      <div className="flex flex-col gap-4 w-full max-w-md">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button 
+            onClick={() => handlePayment('card')}
+            disabled={isProcessing}
+            className="flex flex-col items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black py-6 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-indigo-600/20 disabled:opacity-50"
+          >
+            <CreditCard className="w-6 h-6" />
+            <span>Pay $10 Card</span>
+          </button>
+          <button 
+            onClick={() => handlePayment('momo')}
+            disabled={isProcessing}
+            className="flex flex-col items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-white font-black py-6 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-amber-600/20 disabled:opacity-50"
+          >
+            <Wallet className="w-6 h-6" />
+            <span>Mobile Money</span>
+          </button>
+        </div>
+        <button 
+          onClick={handleSignOut}
+          className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-4 rounded-2xl transition-all uppercase tracking-widest"
+        >
+          Sign Out
+        </button>
+      </div>
+      <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl w-full text-left">
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Why do I need to pay?</p>
+        <ul className="space-y-3">
+          <li className="flex items-start gap-3 text-sm text-zinc-400">
+            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
+            <span>Your 3-month free access has concluded.</span>
+          </li>
+          <li className="flex items-start gap-3 text-sm text-zinc-400">
+            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
+            <span>A one-time fee of $10 provides lifetime access to this shop.</span>
+          </li>
+          <li className="flex items-start gap-3 text-sm text-zinc-400">
+            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
+            <span>Access to inventory, sales, and reports is restricted until payment.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: 'light' | 'dark') => void }) {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'transactions' | 'reports' | 'settings' | 'pos' | 'admin' | 'damages' | 'help' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate'>('dashboard');
   const [navigationHistory, setNavigationHistory] = useState<string[]>(['dashboard']);
   const [highlightedTxId, setHighlightedTxId] = useState<string | null>(null);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
@@ -5315,7 +5607,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'business' | 'profile' | 'security' | 'notifications'>(() => {
+  const [settingsTab, setSettingsTab] = useState<'business' | 'profile' | 'security' | 'notifications' | 'billing'>(() => {
     const saved = localStorage.getItem('settingsTab');
     return (saved as any) || 'business';
   });
@@ -5347,6 +5639,29 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     canViewAnalytics: isManager,
     canManageNotifications: isManager,
   };
+
+  const trialEndDate = useMemo(() => {
+    if (!currentOrg) return null;
+    if (currentOrg.trialExpiresAt) {
+      const d = new Date(currentOrg.trialExpiresAt);
+      if (!isNaN(d.getTime())) return d;
+    }
+    // Fallback to createdAt + 3 months
+    if (currentOrg.createdAt) {
+      const d = new Date(currentOrg.createdAt);
+      if (!isNaN(d.getTime())) {
+        const fallbackDate = new Date(d);
+        fallbackDate.setMonth(fallbackDate.getMonth() + 3);
+        return fallbackDate;
+      }
+    }
+    return null;
+  }, [currentOrg]);
+
+  const isTrialExpired = useMemo(() => {
+    if (!trialEndDate || currentOrg?.isPaid || isSuperAdmin) return false;
+    return new Date() > trialEndDate;
+  }, [trialEndDate, currentOrg?.isPaid, isSuperAdmin]);
 
   const getPlanLimits = (plan: string | undefined) => {
     const p = (plan || 'trial').toLowerCase() as keyof typeof PLAN_LIMITS;
@@ -5412,6 +5727,85 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     );
     return () => unsubscribe();
   }, [currentOrg?.id]);
+
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  const handlePayment = async (method: 'card' | 'momo') => {
+    if (!currentOrg) return;
+    setIsProcessingPayment(true);
+    try {
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const paymentId = Math.random().toString(36).substring(7);
+      await setDocument('payments', paymentId, {
+        id: paymentId,
+        orgId: currentOrg.id,
+        userId: currentOrg.ownerUid,
+        amount: 10, // One-time fee
+        currency: 'USD',
+        status: 'completed',
+        method,
+        createdAt: new Date().toISOString()
+      });
+
+      await updateDocument('organizations', currentOrg.id, {
+        isPaid: true,
+        subscriptionStatus: 'active',
+        plan: 'basic'
+      });
+
+      // Handle referral commission if applicable
+      if (currentOrg.referredBy) {
+        const referralsSnap = await getDocs(query(collection(db, 'referrals'), where('referredOrgId', '==', currentOrg.id)));
+        if (!referralsSnap.empty) {
+          const referralDoc = referralsSnap.docs[0];
+          const referralData = referralDoc.data();
+          
+          const commission = 1; // 10% commission for $10 payment
+          
+          await updateDocument('referrals', referralDoc.id, {
+            status: 'paid',
+            amountEarned: commission,
+            paidAt: new Date().toISOString()
+          });
+
+          const affiliateDoc = await getDoc(doc(db, 'affiliates', referralData.affiliateUid));
+          if (affiliateDoc.exists()) {
+            const affiliateData = affiliateDoc.data();
+            await updateDocument('affiliates', referralData.affiliateUid, {
+              totalEarnings: (affiliateData.totalEarnings || 0) + commission,
+              unpaidEarnings: (affiliateData.unpaidEarnings || 0) + commission
+            });
+          }
+        }
+      }
+
+      showNotification('Payment successful! Full access restored.');
+      // window.location.reload(); // Removed to prevent potential iframe issues
+    } catch (error) {
+      console.error('Payment error:', error);
+      showNotification('Payment failed. Please try again.', 'error');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const planCountdown = useMemo(() => {
+    if (!currentOrg) return '';
+    if (currentOrg.isPaid && currentOrg.plan === 'basic') return 'Lifetime';
+    
+    const target = currentOrg.isPaid ? (currentOrg.expiresAt ? new Date(currentOrg.expiresAt) : null) : trialEndDate;
+    if (!target || isNaN(target.getTime())) return `${currentOrg.plan} Plan`;
+    
+    const now = new Date();
+    const diffTime = target.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return 'Expired';
+    if (diffDays === 0) return 'Expires Today';
+    return `${diffDays} Days Left`;
+  }, [currentOrg, trialEndDate]);
 
   const handleNotificationClick = async (n: any) => {
     if (!currentOrg) return;
@@ -5505,10 +5899,15 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     
     // Check limits
     const ownedOrgs = organizations.filter(o => o.ownerUid === user.uid);
-    const limit = PLAN_LIMITS[userProfile.plan || 'trial'].orgs;
+    const plan = userProfile.plan || 'trial';
+    const limit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS].orgs;
     
     if (ownedOrgs.length >= limit) {
-      showNotification(`You have reached the limit of ${limit} business profile(s) for your current plan. Please upgrade to create more.`, 'error');
+      if (plan === 'trial' || plan === 'basic') {
+        showNotification(`You have reached the limit of 1 free business profile. Please upgrade to a monthly subscription for more shops.`, 'error');
+      } else {
+        showNotification(`You have reached the limit of ${limit} business profile(s) for your current plan.`, 'error');
+      }
       return;
     }
 
@@ -5521,6 +5920,14 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       const trialDays = 14;
       const paidDays = 30;
       const expiresAt = new Date(Date.now() + (isPaidPlan ? paidDays : trialDays) * 24 * 60 * 60 * 1000).toISOString();
+      
+      // Affiliate logic: 3-month trial for new organizations
+      const trialMonths = 3;
+      const trialExpiresAt = new Date(Date.now() + trialMonths * 30 * 24 * 60 * 60 * 1000).toISOString();
+      
+      // Check for referral code in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const referralCode = urlParams.get('ref');
 
       const success = await setDocument('organizations', orgId, {
         id: orgId,
@@ -5532,9 +5939,34 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         uprsRegistrationNumber: '',
         plan: userProfile.plan,
         subscriptionStatus: 'active',
+        isPaid: false,
+        trialExpiresAt,
+        referredBy: referralCode || '',
         createdAt: new Date().toISOString(),
         ...(expiresAt && { expiresAt })
       });
+
+      if (success && referralCode) {
+        // Create referral record
+        const referralId = Math.random().toString(36).substring(7);
+        
+        // Find affiliate by code
+        const affiliatesSnap = await getDocs(query(collection(db, 'affiliates'), where('affiliateCode', '==', referralCode)));
+        
+        if (!affiliatesSnap.empty) {
+          const affiliate = affiliatesSnap.docs[0].data();
+          await setDocument('referrals', referralId, {
+            id: referralId,
+            affiliateUid: affiliate.uid,
+            referredOrgId: orgId,
+            referredUid: user.uid,
+            status: 'registered',
+            amountEarned: 0,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+
       if (success) {
         setIsCreatingOrg(false);
         setNewOrgName('');
@@ -5768,6 +6200,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             {permissions.canAccessSettings && (
               <SidebarItem theme={theme} icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             )}
+            <SidebarItem theme={theme} icon={Share2} label={isSidebarOpen ? "Affiliate" : ""} active={activeTab === 'affiliate'} onClick={() => { setActiveTab('affiliate'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             <SidebarItem theme={theme} icon={HelpCircle} label={isSidebarOpen ? "Help" : ""} active={activeTab === 'help'} onClick={() => { setActiveTab('help'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             
             {isSidebarOpen && permissions.canAccessSettings && (
@@ -6003,11 +6436,11 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             </div>
 
             <button 
-              onClick={() => setActiveTab('settings')}
+              onClick={() => { setActiveTab('settings'); setSettingsTab('billing'); }}
               className="hidden sm:flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl hover:bg-zinc-800 transition-colors group"
             >
               <CreditCard className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
-              <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">{currentOrg?.plan} Plan</span>
+              <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider">{planCountdown}</span>
             </button>
             <div className="relative">
               <button 
@@ -6028,24 +6461,28 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         </header>
 
         <main className="flex-1 p-6 lg:p-10 overflow-y-auto custom-scrollbar">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-              {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} setHighlightedTxId={setHighlightedTxId} isAdmin={isAdmin} isManager={isManager} />}
-              {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} createNotification={createNotification} userProfile={userProfile} permissions={permissions} />}
-              {activeTab === 'inventory' && <Inventory showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedItemId={highlightedItemId} setHighlightedItemId={setHighlightedItemId} />}
-              {activeTab === 'damages' && <Damages showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedDamageId={highlightedDamageId} setHighlightedDamageId={setHighlightedDamageId} />}
-              {activeTab === 'transactions' && <Transactions showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedTxId={highlightedTxId} setHighlightedTxId={setHighlightedTxId} />}
-              {activeTab === 'admin' && <AdminPanel currentOrg={currentOrg} showNotification={showNotification} setIsCreatingOrg={setIsCreatingOrg} isSuperAdmin={isSuperAdmin} permissions={permissions} />}
-              {activeTab === 'reports' && <Reports permissions={permissions} />}
-              {activeTab === 'help' && <HelpSection />}
-              {activeTab === 'sales-analytics' && <SalesAnalytics />}
-              {activeTab === 'expenses-analytics' && <ExpensesAnalytics />}
-              {activeTab === 'profit-analytics' && <ProfitAnalytics />}
-            {activeTab === 'settings' && (
+          {isTrialExpired ? (
+            <PaymentRequired currentOrg={currentOrg} handleSignOut={handleSignOut} showNotification={showNotification} handlePayment={handlePayment} isProcessing={isProcessingPayment} />
+          ) : (
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+                {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} setHighlightedTxId={setHighlightedTxId} isAdmin={isAdmin} isManager={isManager} />}
+                {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} createNotification={createNotification} userProfile={userProfile} permissions={permissions} />}
+                {activeTab === 'inventory' && <Inventory showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedItemId={highlightedItemId} setHighlightedItemId={setHighlightedItemId} />}
+                {activeTab === 'damages' && <Damages showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedDamageId={highlightedDamageId} setHighlightedDamageId={setHighlightedDamageId} />}
+                {activeTab === 'transactions' && <Transactions showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedTxId={highlightedTxId} setHighlightedTxId={setHighlightedTxId} />}
+                {activeTab === 'admin' && <AdminPanel currentOrg={currentOrg} showNotification={showNotification} setIsCreatingOrg={setIsCreatingOrg} isSuperAdmin={isSuperAdmin} permissions={permissions} />}
+                {activeTab === 'reports' && <Reports permissions={permissions} />}
+                {activeTab === 'help' && <HelpSection />}
+                {activeTab === 'sales-analytics' && <SalesAnalytics />}
+                {activeTab === 'expenses-analytics' && <ExpensesAnalytics />}
+                {activeTab === 'profit-analytics' && <ProfitAnalytics />}
+                {activeTab === 'affiliate' && <AffiliateView user={user} showNotification={showNotification} />}
+              {activeTab === 'settings' && (
               <div className="max-w-6xl mx-auto space-y-8 pb-20">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                   <div>
@@ -6061,6 +6498,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                       {[
                         { id: 'business', label: 'Business Profile', icon: Building2, desc: 'Company details & identity' },
                         { id: 'profile', label: 'Personal Profile', icon: User, desc: 'Your account & appearance' },
+                        { id: 'billing', label: 'Billing & Plan', icon: CreditCard, desc: 'Trial status & payments' },
                         { id: 'security', label: 'Security', icon: ShieldCheck, desc: 'Password & access control' },
                         { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Alerts & communication' },
                       ].map((tab) => (
@@ -6444,6 +6882,110 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                             </div>
                           </div>
                         )}
+
+                        {settingsTab === 'billing' && (
+                          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
+                            <div className="flex items-center gap-4 mb-2">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 flex items-center justify-center border border-indigo-600/20">
+                                <CreditCard className="w-6 h-6 text-indigo-500" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-zinc-100">Billing & Subscription</h3>
+                                <p className="text-sm text-zinc-500">Manage your shop's access and subscription plan</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="p-6 bg-zinc-800/30 rounded-2xl border border-zinc-800 space-y-4">
+                                <div className="flex items-start gap-4">
+                                  <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
+                                    <Clock className="w-5 h-5 text-indigo-400" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-zinc-100">Trial Countdown</h4>
+                                    {currentOrg?.isPaid ? (
+                                      <div className="mt-1">
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase tracking-widest">
+                                          <ShieldCheck className="w-3 h-3" /> Lifetime Access
+                                        </span>
+                                        <p className="text-sm text-zinc-500 mt-2">This shop has been fully paid for.</p>
+                                      </div>
+                                    ) : (
+                                      <div className="mt-1">
+                                        <p className="text-3xl font-black text-indigo-500 tracking-tighter">
+                                          {trialEndDate 
+                                            ? Math.max(0, Math.ceil((trialEndDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
+                                            : 0}
+                                          <span className="text-sm font-bold text-zinc-500 ml-2 uppercase tracking-widest">Days Left</span>
+                                        </p>
+                                        <p className="text-sm text-zinc-500 mt-2 leading-relaxed">
+                                          Your 3-month free trial ends on <span className="text-zinc-300 font-bold">{trialEndDate ? formatDate(trialEndDate) : 'N/A'}</span>.
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="p-6 bg-zinc-800/30 rounded-2xl border border-zinc-800 space-y-4">
+                                <div className="flex items-start gap-4">
+                                  <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
+                                    <DollarSign className="w-5 h-5 text-emerald-400" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold text-zinc-100">One-Time Payment</h4>
+                                    <p className="text-sm text-zinc-500 mt-1 leading-relaxed">
+                                      Pay a one-time fee of <span className="text-zinc-100 font-bold">$10</span> to unlock lifetime access for this business profile.
+                                    </p>
+                                    {!currentOrg?.isPaid && (
+                                      <div className="pt-4 flex flex-col gap-2">
+                                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Select Payment Method</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <button 
+                                            onClick={() => handlePayment('card')}
+                                            disabled={isProcessingPayment}
+                                            className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest disabled:opacity-50"
+                                          >
+                                            {isProcessingPayment ? 'Processing...' : 'Bank Card'}
+                                          </button>
+                                          <button 
+                                            onClick={() => handlePayment('momo')}
+                                            disabled={isProcessingPayment}
+                                            className="bg-amber-500 hover:bg-amber-400 text-white text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest disabled:opacity-50"
+                                          >
+                                            {isProcessingPayment ? 'Processing...' : 'Mobile Money'}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="p-6 bg-indigo-600/5 border border-indigo-600/20 rounded-2xl space-y-4">
+                              <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-600/10 flex items-center justify-center shrink-0">
+                                  <Store className="w-5 h-5 text-indigo-500" />
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-zinc-100">Multi-Shop Subscription</h4>
+                                  <p className="text-sm text-zinc-500 mt-1 leading-relaxed">
+                                    Your first shop is free (after the one-time $10 fee). To manage more business profiles, upgrade to a monthly subscription plan.
+                                  </p>
+                                  <div className="pt-4">
+                                    <button 
+                                      onClick={() => setSettingsTab('profile')} // Or a dedicated plans view
+                                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-colors border border-zinc-700"
+                                    >
+                                      View Subscription Plans
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </motion.div>
                     </AnimatePresence>
                   </div>
@@ -6451,6 +6993,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               </div>
             )}
           </motion.div>
+        )}
 
         <footer className="mt-auto pt-10 pb-6 border-t border-zinc-800/50">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -6649,6 +7192,29 @@ function AuthScreen() {
 
 function AppContent() {
   const { user, loading, isAuthReady } = useFirebase();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get('ref');
+    
+    if (refCode && !sessionStorage.getItem(`ref_tracked_${refCode}`)) {
+      const trackClick = async () => {
+        try {
+          const affiliatesSnap = await getDocs(query(collection(db, 'affiliates'), where('affiliateCode', '==', refCode)));
+          if (!affiliatesSnap.empty) {
+            const affiliateDoc = affiliatesSnap.docs[0];
+            await updateDocument('affiliates', affiliateDoc.id, {
+              totalClicks: (affiliateDoc.data().totalClicks || 0) + 1
+            });
+            sessionStorage.setItem(`ref_tracked_${refCode}`, 'true');
+          }
+        } catch (error) {
+          console.error('Error tracking referral click:', error);
+        }
+      };
+      trackClick();
+    }
+  }, []);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('jena-pos-theme');
     if (saved === 'light' || saved === 'dark') return saved;

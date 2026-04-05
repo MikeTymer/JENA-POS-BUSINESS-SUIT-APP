@@ -28,9 +28,58 @@
         "currency": { "type": "string", "description": "Business currency code (e.g., USD, GBP, NGN)" },
         "plan": { "type": "string", "enum": ["basic", "essentials", "plus", "advanced"] },
         "subscriptionStatus": { "type": "string", "enum": ["active", "past_due", "canceled"] },
+        "isPaid": { "type": "boolean", "description": "Whether the one-time fee has been paid" },
+        "trialExpiresAt": { "type": "string", "format": "date-time", "description": "When the 3-month trial expires" },
+        "referredBy": { "type": "string", "description": "Affiliate code of the person who referred this organization" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "ownerUid", "plan"]
+    },
+    "Affiliate": {
+      "title": "Affiliate",
+      "description": "A user who participates in the affiliate marketing program",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "affiliateCode": { "type": "string", "description": "Unique code for referral links" },
+        "status": { "type": "string", "enum": ["active", "pending", "suspended"] },
+        "totalEarnings": { "type": "number" },
+        "unpaidEarnings": { "type": "number" },
+        "totalClicks": { "type": "number", "description": "Total number of clicks on the referral link" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "affiliateCode", "status"]
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "A record of a user referred by an affiliate",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "affiliateUid": { "type": "string" },
+        "referredOrgId": { "type": "string" },
+        "referredUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["registered", "paid", "completed"] },
+        "amountEarned": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "paidAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["affiliateUid", "referredOrgId", "status", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "A record of a one-time payment for the app",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orgId": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orgId", "userId", "amount", "status", "createdAt"]
     },
     "InventoryItem": {
       "title": "Inventory Item",
@@ -187,6 +236,18 @@
     "/memberships/{membershipId}": {
       "schema": "Membership",
       "description": "Mapping of users to organizations"
+    },
+    "/affiliates/{affiliateUid}": {
+      "schema": "Affiliate",
+      "description": "Affiliate profile data"
+    },
+    "/referrals/{referralId}": {
+      "schema": "Referral",
+      "description": "Referral records"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Payment records"
     }
   }
 }
