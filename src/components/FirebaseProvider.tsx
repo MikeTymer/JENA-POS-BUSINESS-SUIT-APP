@@ -39,7 +39,7 @@ export interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
   phoneNumber: string | null;
-  plan: 'trial' | 'basic' | 'essentials' | 'plus' | 'advanced';
+  plan: 'trial' | 'starter' | 'business' | 'enterprise';
   termsAcceptedAt?: string;
   notificationPreferences?: {
     sales?: boolean;
@@ -74,43 +74,53 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      try {
-        setUser(firebaseUser);
-        if (firebaseUser) {
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          
-          const unsubscribeUser = onSnapshot(userDocRef, async (docSnap) => {
-            if (docSnap.exists()) {
-              setUserProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
-            } else {
-              const newProfile = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email,
-                displayName: firebaseUser.displayName,
-                photoURL: firebaseUser.photoURL,
-                phoneNumber: firebaseUser.phoneNumber,
-                plan: 'basic',
-                createdAt: new Date().toISOString()
-              };
-              await setDoc(userDocRef, newProfile);
-              setUserProfile(newProfile as UserProfile);
-            }
-          });
+    let unsubscribeUser: (() => void) | null = null;
 
-          return () => unsubscribeUser();
-        } else {
-          setUserProfile(null);
-        }
-      } catch (error) {
-        console.error("Auth initialization error:", error);
-      } finally {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      
+      if (unsubscribeUser) {
+        unsubscribeUser();
+        unsubscribeUser = null;
+      }
+
+      if (firebaseUser) {
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        
+        unsubscribeUser = onSnapshot(userDocRef, async (docSnap) => {
+          if (docSnap.exists()) {
+            setUserProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
+          } else {
+            const newProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              phoneNumber: firebaseUser.phoneNumber,
+              plan: 'trial',
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(userDocRef, newProfile);
+            setUserProfile(newProfile as UserProfile);
+          }
+          setIsAuthReady(true);
+          setLoading(false);
+        }, (error) => {
+          console.error("User profile snapshot error:", error);
+          setIsAuthReady(true);
+          setLoading(false);
+        });
+      } else {
+        setUserProfile(null);
         setIsAuthReady(true);
         setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUser) unsubscribeUser();
+    };
   }, []);
 
   useEffect(() => {

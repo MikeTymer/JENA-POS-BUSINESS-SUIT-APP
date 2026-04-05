@@ -10,6 +10,7 @@
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
         "phoneNumber": { "type": "string" },
+        "plan": { "type": "string", "enum": ["trial", "starter", "business", "enterprise"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email"]
@@ -26,7 +27,7 @@
         "uprsRegistrationNumber": { "type": "string", "description": "UPRS registration number for the business" },
         "country": { "type": "string", "description": "Business location country code (e.g., US, GB, NG)" },
         "currency": { "type": "string", "description": "Business currency code (e.g., USD, GBP, NGN)" },
-        "plan": { "type": "string", "enum": ["basic", "essentials", "plus", "advanced"] },
+        "plan": { "type": "string", "enum": ["trial", "starter", "business", "enterprise"] },
         "subscriptionStatus": { "type": "string", "enum": ["active", "past_due", "canceled"] },
         "isPaid": { "type": "boolean", "description": "Whether the one-time fee has been paid" },
         "trialExpiresAt": { "type": "string", "format": "date-time", "description": "When the 3-month trial expires" },

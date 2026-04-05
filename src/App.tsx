@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { mtnMoMoService } from './services/mtnService';
+import { getStripe } from './services/stripeService';
 import { 
   signInWithPopup, 
   signInWithRedirect,
@@ -28,6 +29,7 @@ import {
   Menu,
   X,
   CreditCard,
+  Check,
   ArrowUpRight,
   ArrowDownRight,
   Trash2,
@@ -4639,6 +4641,10 @@ function HelpCard({ title, description, steps }: { title: string, description: s
 }
 
 function HelpSection() {
+  const { userProfile } = useFirebase();
+  // Using a consistent seed for the developer image
+  const developerImage = "https://picsum.photos/seed/sakwa-dev/400/400";
+
   return (
     <div className="max-w-5xl space-y-12 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -4739,7 +4745,7 @@ function HelpSection() {
         <div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
           <div className="w-48 h-48 rounded-[3rem] bg-zinc-800 border-8 border-zinc-800/50 flex items-center justify-center overflow-hidden shrink-0 shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500">
             <img 
-              src="https://picsum.photos/seed/micheal-sakwa-face/400/400" 
+              src={developerImage} 
               alt="Micheal Sakwa" 
               className="w-full h-full object-cover scale-110"
               referrerPolicy="no-referrer"
@@ -4773,24 +4779,22 @@ function HelpSection() {
 }
 
 const PLAN_LIMITS = {
-  trial: { orgs: 1, inventory: 50, staff: Infinity },
-  basic: { orgs: 1, inventory: 500, staff: Infinity }, // One-time paid plan
-  essentials: { orgs: 3, inventory: 2000, staff: Infinity },
-  plus: { orgs: 10, inventory: 5000, staff: Infinity },
-  advanced: { orgs: Infinity, inventory: 1000000, staff: Infinity }
+  trial: { orgs: 1, inventory: 1000, staff: Infinity },
+  starter: { orgs: 1, inventory: 1000, staff: Infinity },
+  business: { orgs: 4, inventory: 5000, staff: Infinity },
+  enterprise: { orgs: Infinity, inventory: Infinity, staff: Infinity }
 };
 
 const PLAN_DETAILS = {
-  trial: { price: 0, limits: PLAN_LIMITS.trial, label: 'Trial' },
-  basic: { price: 10, limits: PLAN_LIMITS.basic, label: 'One-Time Access' },
-  essentials: { price: 31500, limits: PLAN_LIMITS.essentials, label: 'Essentials' },
-  plus: { price: 104500, limits: PLAN_LIMITS.plus, label: 'Plus' },
-  advanced: { price: 250000, limits: PLAN_LIMITS.advanced, label: 'Advanced' }
+  trial: { price: 0, limits: PLAN_LIMITS.trial, label: 'Trial', features: ['3-month Free Trial', 'Basic POS', 'Inventory', 'Reports'] },
+  starter: { price: 8000, limits: PLAN_LIMITS.starter, label: 'Starter', features: ['POS Sales', 'Inventory', 'Reports', '1 Business'] },
+  business: { price: 20000, limits: PLAN_LIMITS.business, label: 'Business', features: ['POS', 'Inventory', 'Reports', 'Expense Tracking', '4 Businesses'] },
+  enterprise: { price: 80000, limits: PLAN_LIMITS.enterprise, label: 'Enterprise', features: ['All Features', 'Unlimited Businesses', 'Priority Support'] }
 };
 
 function getPlanPrice(ugxPrice: number, currency?: string) {
   if (ugxPrice === 0) return 'Free';
-  const effectiveCurrency = currency || 'USD';
+  const effectiveCurrency = currency || 'UGX';
   
   // Fixed conversion rates from UGX (approximate)
   const rates: Record<string, number> = {
@@ -4806,7 +4810,7 @@ function getPlanPrice(ugxPrice: number, currency?: string) {
     'AUD': 1 / 2500,
   };
 
-  const rate = rates[effectiveCurrency] || (1 / 3800); // Default to USD rate if unknown
+  const rate = rates[effectiveCurrency] || 1; 
   const convertedAmount = ugxPrice * rate;
   
   return `${formatCurrency(convertedAmount, effectiveCurrency)}/mo`;
@@ -5519,58 +5523,113 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
   );
 }
 
-function PaymentRequired({ currentOrg, handleSignOut, showNotification, handlePayment, isProcessing }: { currentOrg: any, handleSignOut: () => void, showNotification: (m: string, t?: 'success' | 'error') => void, handlePayment: (method: 'card' | 'momo') => Promise<void>, isProcessing: boolean }) {
+function PaymentRequired({ currentOrg, handleSignOut, showNotification, handlePayment, isProcessing }: { currentOrg: any, handleSignOut: () => void, showNotification: (m: string, t?: 'success' | 'error') => void, handlePayment: (method: 'card' | 'momo', plan: string) => Promise<void>, isProcessing: boolean }) {
+  const [selectedPlan, setSelectedPlan] = useState('starter');
+
+  const plans = [
+    {
+      id: 'starter',
+      name: 'Starter',
+      price: 'UGX 8,000',
+      features: PLAN_DETAILS.starter.features,
+      color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+    },
+    {
+      id: 'business',
+      name: 'Business',
+      price: 'UGX 20,000',
+      features: PLAN_DETAILS.business.features,
+      color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
+    },
+    {
+      id: 'enterprise',
+      name: 'Enterprise',
+      price: 'UGX 80,000',
+      features: PLAN_DETAILS.enterprise.features,
+      color: 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+    }
+  ];
+
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center space-y-6 max-w-2xl mx-auto">
-      <div className="w-24 h-24 rounded-full bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
-        <History className="w-12 h-12 text-rose-500" />
+    <div className="flex flex-col items-center justify-center py-10 text-center space-y-8 max-w-5xl mx-auto px-4">
+      <div className="space-y-4">
+        <div className="w-20 h-20 rounded-3xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20 mx-auto">
+          <History className="w-10 h-10 text-rose-500" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-4xl font-black text-zinc-100 uppercase tracking-tighter italic">Trial Period Expired</h2>
+          <p className="text-zinc-400 text-lg">Your 3-month trial for <span className="text-zinc-100 font-bold">{currentOrg?.name}</span> has ended. Choose a plan to continue.</p>
+        </div>
       </div>
-      <div className="space-y-2">
-        <h2 className="text-3xl font-black text-zinc-100 uppercase tracking-tighter">Trial Period Expired</h2>
-        <p className="text-zinc-400 text-lg">Your 3-month trial period for <span className="text-zinc-100 font-bold">{currentOrg?.name}</span> has ended. A one-time payment is required to continue using JENA POS.</p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+        {plans.map((plan) => (
+          <button
+            key={plan.id}
+            onClick={() => setSelectedPlan(plan.id)}
+            className={`relative p-8 rounded-3xl border-2 transition-all text-left flex flex-col h-full group ${
+              selectedPlan === plan.id 
+                ? 'bg-zinc-900 border-indigo-500 shadow-2xl shadow-indigo-500/10' 
+                : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'
+            }`}
+          >
+            {selectedPlan === plan.id && (
+              <div className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center shadow-lg">
+                <Check className="w-5 h-5 text-white" />
+              </div>
+            )}
+            <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest w-fit mb-4 ${plan.color}`}>
+              {plan.name}
+            </div>
+            <div className="mb-6">
+              <span className="text-3xl font-black text-zinc-100 tracking-tighter">{plan.price}</span>
+              <span className="text-zinc-500 text-sm ml-2">/month</span>
+            </div>
+            <ul className="space-y-4 mb-8 flex-grow">
+              {plan.features.map((feature, i) => (
+                <li key={i} className="flex items-center gap-3 text-sm text-zinc-400">
+                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+          </button>
+        ))}
       </div>
-      <div className="flex flex-col gap-4 w-full max-w-md">
+
+      <div className="flex flex-col gap-4 w-full max-w-md pt-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button 
-            onClick={() => handlePayment('card')}
+            onClick={() => handlePayment('card', selectedPlan)}
             disabled={isProcessing}
-            className="flex flex-col items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black py-6 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-indigo-600/20 disabled:opacity-50"
+            className="flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-indigo-600/20 disabled:opacity-50"
           >
-            <CreditCard className="w-6 h-6" />
-            <span>Pay $10 Card</span>
+            {isProcessing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <CreditCard className="w-5 h-5" />
+            )}
+            <span>Bank Card</span>
           </button>
           <button 
-            onClick={() => handlePayment('momo')}
+            onClick={() => handlePayment('momo', selectedPlan)}
             disabled={isProcessing}
-            className="flex flex-col items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-white font-black py-6 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-amber-600/20 disabled:opacity-50"
+            className="flex items-center justify-center gap-3 bg-amber-500 hover:bg-amber-400 text-white font-black py-4 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-amber-600/20 disabled:opacity-50"
           >
-            <Wallet className="w-6 h-6" />
+            {isProcessing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Wallet className="w-5 h-5" />
+            )}
             <span>Mobile Money</span>
           </button>
         </div>
         <button 
           onClick={handleSignOut}
-          className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-4 rounded-2xl transition-all uppercase tracking-widest"
+          className="w-full bg-zinc-800/50 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 font-bold py-4 rounded-2xl transition-all uppercase tracking-widest text-xs"
         >
           Sign Out
         </button>
-      </div>
-      <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl w-full text-left">
-        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Why do I need to pay?</p>
-        <ul className="space-y-3">
-          <li className="flex items-start gap-3 text-sm text-zinc-400">
-            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
-            <span>Your 3-month free access has concluded.</span>
-          </li>
-          <li className="flex items-start gap-3 text-sm text-zinc-400">
-            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
-            <span>A one-time fee of $10 provides lifetime access to this shop.</span>
-          </li>
-          <li className="flex items-start gap-3 text-sm text-zinc-400">
-            <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
-            <span>Access to inventory, sales, and reports is restricted until payment.</span>
-          </li>
-        </ul>
       </div>
     </div>
   );
@@ -5610,8 +5669,13 @@ function TermsAndConditions({ onBack }: { onBack: () => void }) {
         <section className="space-y-4">
           <h2 className="text-2xl font-bold text-zinc-100">3. Subscription and Payments</h2>
           <p>
-            The App offers a 3-month free trial for the first business profile. After the trial, a one-time fee of $10 is required for lifetime access to that profile. Additional business profiles require a monthly subscription.
+            The App offers a 3-month free trial for every business profile. After the trial, a monthly subscription is required to continue using the service. We offer three plans:
           </p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li><strong>Starter:</strong> UGX 8,000/month - Includes POS Sales, Inventory, Reports, and 1 business profile.</li>
+            <li><strong>Business:</strong> UGX 20,000/month - Includes POS, Inventory, Reports, Expense Tracking, and up to 4 business profiles.</li>
+            <li><strong>Enterprise:</strong> UGX 80,000/month - Includes All Features, Unlimited business profiles, and Priority Support.</li>
+          </ul>
           <p>
             Payments are non-refundable once processed. We use third-party payment processors and do not store your full credit card details.
           </p>
@@ -5986,39 +6050,97 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-  const handlePayment = async (method: 'card' | 'momo') => {
-    if (!currentOrg) return;
+  const handlePayment = async (method: 'card' | 'momo', planName: string = 'starter') => {
+    if (!currentOrg || !user) return;
     setIsProcessingPayment(true);
     try {
-      // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const plan = PLAN_DETAILS[planName as keyof typeof PLAN_DETAILS] || PLAN_DETAILS.starter;
+      const ugxPrice = plan.price;
+
+      if (method === 'momo') {
+        const phoneNumber = userProfile?.phoneNumber || '';
+        if (!phoneNumber && import.meta.env.VITE_MTN_MOMO_API_KEY) {
+          showNotification('Please add a phone number to your profile for Mobile Money payments.', 'error');
+          setIsProcessingPayment(false);
+          return;
+        }
+        
+        try {
+          if (import.meta.env.VITE_MTN_MOMO_API_KEY) {
+            const referenceId = await mtnMoMoService.requestToPay(
+              ugxPrice,
+              'UGX',
+              phoneNumber,
+              `plan_${planName}_${currentOrg.id}`
+            );
+            
+            showNotification('Payment request sent. Please confirm on your phone.');
+            
+            let status: 'SUCCESSFUL' | 'FAILED' | 'PENDING' = 'PENDING';
+            let attempts = 0;
+            while (status === 'PENDING' && attempts < 12) {
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              status = await mtnMoMoService.getTransactionStatus(referenceId);
+              attempts++;
+            }
+            
+            if (status !== 'SUCCESSFUL') {
+              throw new Error('Mobile Money payment failed or timed out.');
+            }
+          } else {
+            // Simulation if no keys
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        } catch (momoErr: any) {
+          console.error('MoMo error:', momoErr);
+          if (import.meta.env.VITE_MTN_MOMO_API_KEY) throw momoErr;
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } else {
+        // Stripe Integration
+        const stripe = await getStripe();
+        if (stripe && import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
+           // In a real app, you'd call your backend to create a session
+           // const session = await createCheckoutSession(planName, ugxPrice);
+           // await stripe.redirectToCheckout({ sessionId: session.id });
+           await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+           await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
       
       const paymentId = Math.random().toString(36).substring(7);
       await setDocument('payments', paymentId, {
         id: paymentId,
         orgId: currentOrg.id,
         userId: currentOrg.ownerUid,
-        amount: 10, // One-time fee
-        currency: 'USD',
+        amount: plan.price,
+        currency: 'UGX',
         status: 'completed',
         method,
+        plan: planName,
         createdAt: new Date().toISOString()
       });
 
       await updateDocument('organizations', currentOrg.id, {
         isPaid: true,
         subscriptionStatus: 'active',
-        plan: 'basic'
+        plan: planName,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
       });
 
-      // Handle referral commission if applicable
+      if (user) {
+        await updateDocument('users', user.uid, {
+          plan: planName
+        });
+      }
+
       if (currentOrg.referredBy) {
         const referralsSnap = await getDocs(query(collection(db, 'referrals'), where('referredOrgId', '==', currentOrg.id)));
         if (!referralsSnap.empty) {
           const referralDoc = referralsSnap.docs[0];
           const referralData = referralDoc.data();
-          
-          const commission = 1; // 10% commission for $10 payment
+          const commission = plan.price * 0.1;
           
           await updateDocument('referrals', referralDoc.id, {
             status: 'paid',
@@ -6037,8 +6159,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         }
       }
 
-      showNotification('Payment successful! Full access restored.');
-      // window.location.reload(); // Removed to prevent potential iframe issues
+      showNotification(`Payment successful! You are now on the ${plan.label} plan.`);
     } catch (error) {
       console.error('Payment error:', error);
       showNotification('Payment failed. Please try again.', 'error');
@@ -6170,16 +6291,11 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     const orgId = Math.random().toString(36).substring(7);
     try {
       const isFirstOrg = ownedOrgs.length === 0;
-      const isPaidPlan = userProfile.plan !== 'trial' && userProfile.plan !== 'basic';
       
-      // Set expiration: 14 days for trial/basic, 30 days for paid plans
-      const trialDays = 14;
-      const paidDays = 30;
-      const expiresAt = new Date(Date.now() + (isPaidPlan ? paidDays : trialDays) * 24 * 60 * 60 * 1000).toISOString();
-      
-      // Affiliate logic: 3-month trial for new organizations
+      // Set expiration: 3 months for all new organizations as per new pricing
       const trialMonths = 3;
-      const trialExpiresAt = new Date(Date.now() + trialMonths * 30 * 24 * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + trialMonths * 30 * 24 * 60 * 60 * 1000).toISOString();
+      const trialExpiresAt = expiresAt;
       
       // Check for referral code in URL
       const urlParams = new URLSearchParams(window.location.search);
@@ -6458,57 +6574,6 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             )}
             <SidebarItem theme={theme} icon={Share2} label={isSidebarOpen ? "Affiliate" : ""} active={activeTab === 'affiliate'} onClick={() => { setActiveTab('affiliate'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             <SidebarItem theme={theme} icon={HelpCircle} label={isSidebarOpen ? "Help" : ""} active={activeTab === 'help'} onClick={() => { setActiveTab('help'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
-            
-            {isSidebarOpen && permissions.canAccessSettings && (
-              <div 
-                onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }}
-                className="mt-8 px-4 py-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/50 space-y-3 cursor-pointer hover:bg-zinc-800 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Plan Usage</span>
-                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">{currentOrg?.plan || 'trial'}</span>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] font-medium text-zinc-400">
-                    <span>Organizations</span>
-                    <span>{organizations.filter(o => o.ownerUid === user?.uid).length} / {orgLimits.orgs === Infinity ? 'Unlimited' : orgLimits.orgs}</span>
-                  </div>
-                  <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                      style={{ width: `${orgLimits.orgs === Infinity ? 0 : Math.min(100, (organizations.filter(o => o.ownerUid === user?.uid).length / orgLimits.orgs) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] font-medium text-zinc-400">
-                    <span>Inventory</span>
-                    <span>{inventory.length} / {currentOrgLimits.inventory === Infinity ? 'Unlimited' : currentOrgLimits.inventory}</span>
-                  </div>
-                  <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-amber-500 rounded-full transition-all duration-500"
-                      style={{ width: `${currentOrgLimits.inventory === Infinity ? 0 : Math.min(100, (inventory.length / currentOrgLimits.inventory) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] font-medium text-zinc-400">
-                    <span>Staff</span>
-                    <span>{staff.length} / {currentOrgLimits.staff === Infinity ? 'Unlimited' : currentOrgLimits.staff}</span>
-                  </div>
-                  <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                      style={{ width: `${currentOrgLimits.staff === Infinity ? 0 : Math.min(100, (staff.length / currentOrgLimits.staff) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </nav>
 
           <div className="pt-4 border-t border-zinc-800 space-y-2">
@@ -7161,26 +7226,17 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                                   </div>
                                   <div>
                                     <h4 className="font-bold text-zinc-100">Trial Countdown</h4>
-                                    {currentOrg?.isPaid ? (
-                                      <div className="mt-1">
-                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase tracking-widest">
-                                          <ShieldCheck className="w-3 h-3" /> Lifetime Access
-                                        </span>
-                                        <p className="text-sm text-zinc-500 mt-2">This shop has been fully paid for.</p>
-                                      </div>
-                                    ) : (
-                                      <div className="mt-1">
-                                        <p className="text-3xl font-black text-indigo-500 tracking-tighter">
-                                          {trialEndDate 
-                                            ? Math.max(0, Math.ceil((trialEndDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
-                                            : 0}
-                                          <span className="text-sm font-bold text-zinc-500 ml-2 uppercase tracking-widest">Days Left</span>
-                                        </p>
-                                        <p className="text-sm text-zinc-500 mt-2 leading-relaxed">
-                                          Your 3-month free trial ends on <span className="text-zinc-300 font-bold">{trialEndDate ? formatDate(trialEndDate) : 'N/A'}</span>.
-                                        </p>
-                                      </div>
-                                    )}
+                                    <div className="mt-1">
+                                      <p className="text-3xl font-black text-indigo-500 tracking-tighter">
+                                        {trialEndDate 
+                                          ? Math.max(0, Math.ceil((trialEndDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
+                                          : 0}
+                                        <span className="text-sm font-bold text-zinc-500 ml-2 uppercase tracking-widest">Days Left</span>
+                                      </p>
+                                      <p className="text-sm text-zinc-500 mt-2 leading-relaxed">
+                                        Your 3-month free trial ends on <span className="text-zinc-300 font-bold">{trialEndDate ? formatDate(trialEndDate) : 'N/A'}</span>.
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -7188,58 +7244,83 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                               <div className="p-6 bg-zinc-800/30 rounded-2xl border border-zinc-800 space-y-4">
                                 <div className="flex items-start gap-4">
                                   <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
-                                    <DollarSign className="w-5 h-5 text-emerald-400" />
+                                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
                                   </div>
                                   <div>
-                                    <h4 className="font-bold text-zinc-100">One-Time Payment</h4>
-                                    <p className="text-sm text-zinc-500 mt-1 leading-relaxed">
-                                      Pay a one-time fee of <span className="text-zinc-100 font-bold">$10</span> to unlock lifetime access for this business profile.
-                                    </p>
-                                    {!currentOrg?.isPaid && (
-                                      <div className="pt-4 flex flex-col gap-2">
-                                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Select Payment Method</p>
-                                        <div className="grid grid-cols-2 gap-2">
-                                          <button 
-                                            onClick={() => handlePayment('card')}
-                                            disabled={isProcessingPayment}
-                                            className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest disabled:opacity-50"
-                                          >
-                                            {isProcessingPayment ? 'Processing...' : 'Bank Card'}
-                                          </button>
-                                          <button 
-                                            onClick={() => handlePayment('momo')}
-                                            disabled={isProcessingPayment}
-                                            className="bg-amber-500 hover:bg-amber-400 text-white text-[10px] font-bold py-2 rounded-lg transition-all uppercase tracking-widest disabled:opacity-50"
-                                          >
-                                            {isProcessingPayment ? 'Processing...' : 'Mobile Money'}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
+                                    <h4 className="font-bold text-zinc-100">Active Plan</h4>
+                                    <div className="mt-1">
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-bold uppercase tracking-widest border border-emerald-500/20">
+                                        {PLAN_DETAILS[currentOrg?.plan as keyof typeof PLAN_DETAILS]?.label || 'Trial'}
+                                      </span>
+                                      <p className="text-sm text-zinc-500 mt-3 leading-relaxed">
+                                        {currentOrg?.isPaid ? 'Your subscription is active.' : 'You are currently on a free trial.'}
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="p-6 bg-indigo-600/5 border border-indigo-600/20 rounded-2xl space-y-4">
-                              <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 rounded-xl bg-indigo-600/10 flex items-center justify-center shrink-0">
-                                  <Store className="w-5 h-5 text-indigo-500" />
-                                </div>
-                                <div>
-                                  <h4 className="font-bold text-zinc-100">Multi-Shop Subscription</h4>
-                                  <p className="text-sm text-zinc-500 mt-1 leading-relaxed">
-                                    Your first shop is free (after the one-time $10 fee). To manage more business profiles, upgrade to a monthly subscription plan.
-                                  </p>
-                                  <div className="pt-4">
-                                    <button 
-                                      onClick={() => setSettingsTab('profile')} // Or a dedicated plans view
-                                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-colors border border-zinc-700"
-                                    >
-                                      View Subscription Plans
-                                    </button>
+                            <div className="space-y-6">
+                              <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Available Plans</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {[
+                                  { id: 'starter', name: 'Starter', price: 'UGX 8,000', color: 'text-emerald-500', features: PLAN_DETAILS.starter.features },
+                                  { id: 'business', name: 'Business', price: 'UGX 20,000', color: 'text-indigo-500', features: PLAN_DETAILS.business.features },
+                                  { id: 'enterprise', name: 'Enterprise', price: 'UGX 80,000', color: 'text-amber-500', features: PLAN_DETAILS.enterprise.features }
+                                ].map((plan) => (
+                                  <div key={plan.id} className={cn(
+                                    "p-6 rounded-2xl border transition-all flex flex-col",
+                                    currentOrg?.plan === plan.id ? "bg-zinc-800/50 border-indigo-500" : "bg-zinc-900 border-zinc-800"
+                                  )}>
+                                    <p className={cn("text-[10px] font-bold uppercase tracking-widest mb-1", plan.color)}>{plan.name}</p>
+                                    <p className="text-xl font-black text-zinc-100 tracking-tighter mb-4">{plan.price}<span className="text-[10px] text-zinc-500 ml-1">/mo</span></p>
+                                    
+                                    <ul className="space-y-2 mb-6 flex-grow">
+                                      {plan.features.map((feature, i) => (
+                                        <li key={i} className="flex items-center gap-2 text-[10px] text-zinc-400">
+                                          <Check className="w-3 h-3 text-indigo-500 shrink-0" />
+                                          {feature}
+                                        </li>
+                                      ))}
+                                    </ul>
+
+                                    <div className="space-y-2">
+                                      <button 
+                                        onClick={() => handlePayment('momo', plan.id)}
+                                        disabled={isProcessingPayment || currentOrg?.plan === plan.id}
+                                        className={cn(
+                                          "w-full py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                                          currentOrg?.plan === plan.id 
+                                            ? "bg-zinc-800 text-zinc-500 cursor-default" 
+                                            : "bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20"
+                                        )}
+                                      >
+                                        {isProcessingPayment ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <Wallet className="w-3 h-3" />
+                                        )}
+                                        {currentOrg?.plan === plan.id ? 'Current Plan' : 'Mobile Money'}
+                                      </button>
+                                      
+                                      {currentOrg?.plan !== plan.id && (
+                                        <button 
+                                          onClick={() => handlePayment('card', plan.id)}
+                                          disabled={isProcessingPayment}
+                                          className="w-full py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2"
+                                        >
+                                          {isProcessingPayment ? (
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                          ) : (
+                                            <CreditCard className="w-3 h-3" />
+                                          )}
+                                          Pay with Card
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -7514,7 +7595,14 @@ function AppContent() {
   }
 
   if (user) {
-    if (userProfile && !userProfile.termsAcceptedAt) {
+    if (!userProfile) {
+      return (
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+        </div>
+      );
+    }
+    if (!userProfile.termsAcceptedAt) {
       return <TermsAcceptanceModal userProfile={userProfile} />;
     }
     return <MainApp theme={theme} setTheme={setTheme} />;

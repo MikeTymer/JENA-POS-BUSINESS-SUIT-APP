@@ -58,7 +58,7 @@ service cloud.firestore {
       return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'phoneNumber', 'plan', 'termsAcceptedAt', 'notificationPreferences', 'createdAt', 'updatedAt']) &&
              data.uid is string && data.email is string &&
              data.uid == request.auth.uid &&
-             (!('plan' in data) || data.plan in ['trial', 'basic', 'essentials', 'plus', 'advanced']) &&
+             (!('plan' in data) || data.plan in ['trial', 'starter', 'business', 'enterprise']) &&
              (!('termsAcceptedAt' in data) || data.termsAcceptedAt is string) &&
              (!('notificationPreferences' in data) || data.notificationPreferences is map);
     }
@@ -73,7 +73,7 @@ service cloud.firestore {
              (!('address' in data) || data.address is string) &&
              (!('uprsRegistrationNumber' in data) || data.uprsRegistrationNumber is string) &&
              (!('logoUrl' in data) || data.logoUrl is string) &&
-             data.plan in ['trial', 'basic', 'essentials', 'plus', 'advanced'] &&
+             data.plan in ['trial', 'starter', 'business', 'enterprise'] &&
              data.subscriptionStatus is string &&
              data.createdAt is string &&
              (!('updatedAt' in data) || data.updatedAt is string) &&
