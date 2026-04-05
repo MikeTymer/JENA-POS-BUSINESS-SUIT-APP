@@ -101,10 +101,14 @@ service cloud.firestore {
     }
 
     function isValidPayment(data) {
-      return hasOnlyAllowedFields(['id', 'orgId', 'userId', 'amount', 'currency', 'status', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['id', 'orgId', 'userId', 'amount', 'currency', 'status', 'method', 'plan', 'phoneNumber', 'error', 'createdAt', 'updatedAt']) &&
              data.orgId is string && data.userId is string &&
              data.amount is number && data.amount > 0 &&
-             data.status in ['pending', 'completed', 'failed'];
+             data.status in ['pending', 'completed', 'failed'] &&
+             (!('method' in data) || data.method is string) &&
+             (!('plan' in data) || data.plan is string) &&
+             (!('phoneNumber' in data) || data.phoneNumber is string || data.phoneNumber == null) &&
+             (!('error' in data) || data.error is string);
     }
 
     function isValidInventoryItem(data) {
@@ -260,7 +264,7 @@ service cloud.firestore {
 
     match /payments/{paymentId} {
       allow read: if isAuthenticated() && (isSuperAdmin() || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() && isValidPayment(request.resource.data);
+      allow create: if isAuthenticated() && isValidPayment(request.resource.data) && (isSuperAdmin() || request.resource.data.userId == request.auth.uid);
       allow update: if isSuperAdmin();
     }
   }

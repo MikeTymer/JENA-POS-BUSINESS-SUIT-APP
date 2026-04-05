@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { mtnMoMoService } from './services/mtnService';
-import { getStripe } from './services/stripeService';
 import { 
   signInWithPopup, 
   signInWithRedirect,
@@ -65,7 +64,8 @@ import {
   ArrowLeft,
   User,
   Share2,
-  Copy
+  Copy,
+  Phone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -5536,21 +5536,21 @@ function PaymentRequired({ currentOrg, handleSignOut, showNotification, handlePa
     {
       id: 'starter',
       name: 'Starter',
-      price: 'UGX 8,000',
+      price: '8000',
       features: PLAN_DETAILS.starter.features,
       color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
     },
     {
       id: 'business',
       name: 'Business',
-      price: 'UGX 20,000',
+      price: '20000',
       features: PLAN_DETAILS.business.features,
       color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
     },
     {
       id: 'enterprise',
       name: 'Enterprise',
-      price: 'UGX 80,000',
+      price: '80000',
       features: PLAN_DETAILS.enterprise.features,
       color: 'bg-amber-500/10 text-amber-500 border-amber-500/20'
     }
@@ -5604,32 +5604,18 @@ function PaymentRequired({ currentOrg, handleSignOut, showNotification, handlePa
       </div>
 
       <div className="flex flex-col gap-4 w-full max-w-md pt-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <button 
-            onClick={() => handlePayment('card', selectedPlan)}
-            disabled={isProcessing}
-            className="flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-indigo-600/20 disabled:opacity-50"
-          >
-            {isProcessing ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <CreditCard className="w-5 h-5" />
-            )}
-            <span>Bank Card</span>
-          </button>
-          <button 
-            onClick={() => handlePayment('momo', selectedPlan)}
-            disabled={isProcessing}
-            className="flex items-center justify-center gap-3 bg-amber-500 hover:bg-amber-400 text-white font-black py-4 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-amber-600/20 disabled:opacity-50"
-          >
-            {isProcessing ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Wallet className="w-5 h-5" />
-            )}
-            <span>Mobile Money</span>
-          </button>
-        </div>
+        <button 
+          onClick={() => handlePayment('momo', selectedPlan)}
+          disabled={isProcessing}
+          className="flex items-center justify-center gap-3 bg-amber-500 hover:bg-amber-400 text-white font-black py-4 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-widest shadow-xl shadow-amber-600/20 disabled:opacity-50"
+        >
+          {isProcessing ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Wallet className="w-5 h-5" />
+          )}
+          <span>Mobile Money</span>
+        </button>
         <button 
           onClick={handleSignOut}
           className="w-full bg-zinc-800/50 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 font-bold py-4 rounded-2xl transition-all uppercase tracking-widest text-xs"
@@ -5902,6 +5888,82 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
   );
 }
 
+function MomoPaymentModal({ planName, price, currency, onClose, onConfirm, isProcessing }: { planName: string, price: number, currency: string, onClose: () => void, onConfirm: (phone: string) => void, isProcessing: boolean }) {
+  const [phoneNumber, setPhoneNumber] = useState('');
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+    >
+      <motion.div 
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        className="bg-zinc-900 border border-zinc-800 p-8 rounded-[32px] max-w-md w-full space-y-8 relative overflow-hidden"
+      >
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-amber-600" />
+        
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <h3 className="text-2xl font-black text-zinc-100 uppercase tracking-tighter italic">Mobile Money Checkout</h3>
+            <p className="text-zinc-400 text-sm">Complete your subscription for <span className="text-amber-500 font-bold uppercase">{planName}</span></p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors">
+            <X className="w-6 h-6 text-zinc-500" />
+          </button>
+        </div>
+
+        <div className="bg-zinc-800/50 p-6 rounded-2xl border border-zinc-700/50 space-y-4">
+          <div className="flex justify-between items-center">
+            <span className="text-zinc-500 font-bold uppercase text-xs tracking-widest">Amount to Pay</span>
+            <span className="text-2xl font-black text-zinc-100 tracking-tighter">{price}</span>
+          </div>
+          <div className="h-px bg-zinc-700/50" />
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">MTN Phone Number</label>
+            <div className="relative">
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              <input 
+                type="tel" 
+                placeholder="e.g. 256770000000"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-xl pl-12 pr-4 py-4 text-zinc-100 focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                autoFocus
+              />
+            </div>
+            <p className="text-[10px] text-zinc-500 italic">Enter number in international format (e.g., 2567...)</p>
+          </div>
+        </div>
+
+        <button 
+          onClick={() => onConfirm(phoneNumber)}
+          disabled={!phoneNumber || isProcessing}
+          className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:hover:bg-amber-500 text-white font-black py-5 rounded-2xl transition-all shadow-xl shadow-amber-900/20 flex items-center justify-center gap-3 uppercase tracking-widest"
+        >
+          {isProcessing ? (
+            <>
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span>Processing...</span>
+            </>
+          ) : (
+            <>
+              <Wallet className="w-6 h-6" />
+              <span>Pay Now</span>
+            </>
+          )}
+        </button>
+
+        <p className="text-[10px] text-center text-zinc-500">
+          By clicking "Pay Now", a prompt will be sent to your phone. Please enter your PIN to authorize the transaction.
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: 'light' | 'dark') => void }) {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate' | 'terms' | 'privacy'>('dashboard');
@@ -5944,6 +6006,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
 
   const currentStaffMember = staff.find(s => s.uid === user?.uid || s.email === user?.email);
   const isSuperAdmin = user?.email === 'sakwamikes@gmail.com';
@@ -6054,77 +6117,103 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     return () => unsubscribe();
   }, [currentOrg?.id]);
 
+  // Fetch payments
+  useEffect(() => {
+    if (!currentOrg) return;
+    const unsubscribe = subscribeToCollection<any>(
+      'payments',
+      [where('orgId', '==', currentOrg.id)],
+      (data) => {
+        setPayments(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      }
+    );
+    return () => unsubscribe();
+  }, [currentOrg?.id]);
+
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [momoPaymentData, setMomoPaymentData] = useState<{ planName: string, price: number } | null>(null);
 
-  const handlePayment = async (method: 'card' | 'momo', planName: string = 'starter') => {
+  const handlePayment = async (method: 'card' | 'momo', planName: string = 'starter', phoneNumber?: string) => {
     if (!currentOrg || !user) return;
-    setIsProcessingPayment(true);
-    try {
-      const plan = PLAN_DETAILS[planName as keyof typeof PLAN_DETAILS] || PLAN_DETAILS.starter;
-      const ugxPrice = plan.price;
+    
+    const plan = PLAN_DETAILS[planName as keyof typeof PLAN_DETAILS] || PLAN_DETAILS.starter;
+    const ugxPrice = plan.price;
+    const isSandbox = (import.meta.env.VITE_MTN_MOMO_TARGET_ENVIRONMENT || 'production') === 'sandbox';
+    const currency = isSandbox ? 'EUR' : 'UGX';
+    
+    // Convert price if using EUR in sandbox (approx 1 EUR = 4100 UGX)
+    const finalPrice = currency === 'EUR' ? Math.ceil(ugxPrice / 4100) : ugxPrice;
 
+    if (method === 'momo' && !phoneNumber) {
+      setMomoPaymentData({ planName, price: finalPrice });
+      return;
+    }
+
+    setIsProcessingPayment(true);
+    const paymentId = Math.random().toString(36).substring(7);
+    
+    try {
       if (method === 'momo') {
-        const phoneNumber = userProfile?.phoneNumber || '';
-        if (!phoneNumber && import.meta.env.VITE_MTN_MOMO_API_KEY) {
-          showNotification('Please add a phone number to your profile for Mobile Money payments.', 'error');
-          setIsProcessingPayment(false);
-          return;
-        }
+        if (!phoneNumber) throw new Error('Phone number is required for Mobile Money');
         
         try {
-          if (import.meta.env.VITE_MTN_MOMO_API_KEY) {
-            const referenceId = await mtnMoMoService.requestToPay(
-              ugxPrice,
-              'UGX',
-              phoneNumber,
-              `plan_${planName}_${currentOrg.id}`
-            );
-            
-            showNotification('Payment request sent. Please confirm on your phone.');
-            
-            let status: 'SUCCESSFUL' | 'FAILED' | 'PENDING' = 'PENDING';
-            let attempts = 0;
-            while (status === 'PENDING' && attempts < 12) {
-              await new Promise(resolve => setTimeout(resolve, 5000));
-              status = await mtnMoMoService.getTransactionStatus(referenceId);
-              attempts++;
-            }
-            
-            if (status !== 'SUCCESSFUL') {
-              throw new Error('Mobile Money payment failed or timed out.');
-            }
-          } else {
-            // Simulation if no keys
-            await new Promise(resolve => setTimeout(resolve, 2000));
+          showNotification('Initiating payment request...', 'success');
+          const referenceId = await mtnMoMoService.requestToPay(
+            finalPrice,
+            currency,
+            phoneNumber,
+            `plan_${planName}_${currentOrg.id}_${paymentId}`
+          );
+          
+          showNotification('Payment request sent. Please confirm on your phone.');
+          
+          let status: 'SUCCESSFUL' | 'FAILED' | 'PENDING' = 'PENDING';
+          let attempts = 0;
+          while (status === 'PENDING' && attempts < 12) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            status = await mtnMoMoService.getTransactionStatus(referenceId);
+            attempts++;
+          }
+          
+          if (status !== 'SUCCESSFUL') {
+            throw new Error(`Mobile Money payment ${status === 'PENDING' ? 'timed out' : 'failed'}.`);
           }
         } catch (momoErr: any) {
           console.error('MoMo error:', momoErr);
-          if (import.meta.env.VITE_MTN_MOMO_API_KEY) throw momoErr;
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Track failed payment
+          await setDocument('payments', paymentId, {
+            id: paymentId,
+            orgId: currentOrg.id,
+            userId: user.uid,
+            amount: finalPrice,
+            currency: currency,
+            status: 'failed',
+            error: momoErr.message || 'Unknown MoMo error',
+            method,
+            plan: planName,
+            phoneNumber,
+            createdAt: new Date().toISOString()
+          });
+
+          throw momoErr;
         }
       } else {
-        // Stripe Integration
-        const stripe = await getStripe();
-        if (stripe && import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-           // In a real app, you'd call your backend to create a session
-           // const session = await createCheckoutSession(planName, ugxPrice);
-           // await stripe.redirectToCheckout({ sessionId: session.id });
-           await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-           await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+        // Stripe Integration - Removed as requested
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
       
-      const paymentId = Math.random().toString(36).substring(7);
+      // Track successful payment
       await setDocument('payments', paymentId, {
         id: paymentId,
         orgId: currentOrg.id,
-        userId: currentOrg.ownerUid,
-        amount: plan.price,
-        currency: 'UGX',
+        userId: user.uid,
+        amount: finalPrice,
+        currency: currency,
         status: 'completed',
         method,
         plan: planName,
+        phoneNumber: phoneNumber || null,
         createdAt: new Date().toISOString()
       });
 
@@ -6166,9 +6255,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       }
 
       showNotification(`Payment successful! You are now on the ${plan.label} plan.`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Payment error:', error);
-      showNotification('Payment failed. Please try again.', 'error');
+      showNotification(error.message || 'Payment failed. Please try again.', 'error');
     } finally {
       setIsProcessingPayment(false);
     }
@@ -6506,6 +6595,24 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 
   return (
     <div className="min-h-screen bg-zinc-950 flex">
+      {/* MoMo Payment Modal */}
+      <AnimatePresence>
+        {momoPaymentData && (
+          <MomoPaymentModal 
+            planName={momoPaymentData.planName}
+            price={momoPaymentData.price}
+            currency={currentOrg?.currency || 'UGX'}
+            onClose={() => setMomoPaymentData(null)}
+            onConfirm={async (phoneNumber) => {
+              const plan = momoPaymentData.planName;
+              setMomoPaymentData(null);
+              await handlePayment('momo', plan, phoneNumber);
+            }}
+            isProcessing={isProcessingPayment}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Mobile Overlay */}
       <AnimatePresence>
         {isSidebarOpen && (
@@ -7271,9 +7378,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                               <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Available Plans</h4>
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {[
-                                  { id: 'starter', name: 'Starter', price: 'UGX 8,000', color: 'text-emerald-500', features: PLAN_DETAILS.starter.features },
-                                  { id: 'business', name: 'Business', price: 'UGX 20,000', color: 'text-indigo-500', features: PLAN_DETAILS.business.features },
-                                  { id: 'enterprise', name: 'Enterprise', price: 'UGX 80,000', color: 'text-amber-500', features: PLAN_DETAILS.enterprise.features }
+                                  { id: 'starter', name: 'Starter', price: '8000', color: 'text-emerald-500', features: PLAN_DETAILS.starter.features },
+                                  { id: 'business', name: 'Business', price: '20000', color: 'text-indigo-500', features: PLAN_DETAILS.business.features },
+                                  { id: 'enterprise', name: 'Enterprise', price: '80000', color: 'text-amber-500', features: PLAN_DETAILS.enterprise.features }
                                 ].map((plan) => (
                                   <div key={plan.id} className={cn(
                                     "p-6 rounded-2xl border transition-all flex flex-col",
@@ -7309,24 +7416,82 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                                         )}
                                         {currentOrg?.plan === plan.id ? 'Current Plan' : 'Mobile Money'}
                                       </button>
-                                      
-                                      {currentOrg?.plan !== plan.id && (
-                                        <button 
-                                          onClick={() => handlePayment('card', plan.id)}
-                                          disabled={isProcessingPayment}
-                                          className="w-full py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2"
-                                        >
-                                          {isProcessingPayment ? (
-                                            <Loader2 className="w-3 h-3 animate-spin" />
-                                          ) : (
-                                            <CreditCard className="w-3 h-3" />
-                                          )}
-                                          Pay with Card
-                                        </button>
-                                      )}
                                     </div>
                                   </div>
                                 ))}
+                              </div>
+                            </div>
+
+                            {/* Payment History */}
+                            <div className="space-y-6">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Recent Payment Attempts</h4>
+                                <span className="text-[10px] text-zinc-600 italic">Tracking all Mobile Money & Card transactions</span>
+                              </div>
+                              
+                              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left border-collapse">
+                                    <thead>
+                                      <tr className="border-b border-zinc-800 bg-zinc-800/20">
+                                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Date</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Plan</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Method</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Amount</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Status</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Details</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-800">
+                                      {payments.length === 0 ? (
+                                        <tr>
+                                          <td colSpan={6} className="px-6 py-12 text-center text-zinc-500 italic text-sm">
+                                            No payment attempts recorded yet.
+                                          </td>
+                                        </tr>
+                                      ) : (
+                                        payments.slice(0, 10).map((payment) => (
+                                          <tr key={payment.id} className="hover:bg-zinc-800/30 transition-colors">
+                                            <td className="px-6 py-4 text-xs text-zinc-400 whitespace-nowrap">
+                                              {formatDate(payment.createdAt)}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                              <span className="text-xs font-bold text-zinc-100 uppercase">{payment.plan}</span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                              <div className="flex items-center gap-2">
+                                                {payment.method === 'momo' ? (
+                                                  <Wallet className="w-3 h-3 text-amber-500" />
+                                                ) : (
+                                                  <CreditCard className="w-3 h-3 text-indigo-500" />
+                                                )}
+                                                <span className="text-xs text-zinc-400 capitalize">{payment.method}</span>
+                                              </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-xs font-bold text-zinc-100">
+                                              {formatCurrency(payment.amount, payment.currency)}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                              <span className={cn(
+                                                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border",
+                                                payment.status === 'completed' 
+                                                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+                                                  : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                                              )}>
+                                                {payment.status}
+                                              </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                              <p className="text-[10px] text-zinc-500 max-w-[200px] truncate" title={payment.error || payment.phoneNumber}>
+                                                {payment.error || payment.phoneNumber || '-'}
+                                              </p>
+                                            </td>
+                                          </tr>
+                                        ))
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
                             </div>
                           </div>
