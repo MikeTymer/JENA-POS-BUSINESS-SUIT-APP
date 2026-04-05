@@ -40,6 +40,7 @@ export interface UserProfile {
   photoURL: string | null;
   phoneNumber: string | null;
   plan: 'trial' | 'basic' | 'essentials' | 'plus' | 'advanced';
+  termsAcceptedAt?: string;
   notificationPreferences?: {
     sales?: boolean;
     inventory?: boolean;

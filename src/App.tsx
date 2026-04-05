@@ -5576,9 +5576,265 @@ function PaymentRequired({ currentOrg, handleSignOut, showNotification, handlePa
   );
 }
 
+function TermsAndConditions({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="max-w-4xl mx-auto py-12 px-6 space-y-8">
+      <button 
+        onClick={onBack}
+        className="flex items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors mb-8 group"
+      >
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+        <span className="text-sm font-bold uppercase tracking-widest">Back</span>
+      </button>
+
+      <div className="space-y-4">
+        <h1 className="text-5xl font-black text-zinc-100 tracking-tighter uppercase italic">Terms & Conditions</h1>
+        <p className="text-zinc-500 font-medium">Last updated: April 5, 2026</p>
+      </div>
+
+      <div className="prose prose-invert max-w-none space-y-8 text-zinc-400 leading-relaxed">
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">1. Acceptance of Terms</h2>
+          <p>
+            By accessing and using JENA POS (the "App"), you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use the App.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">2. Description of Service</h2>
+          <p>
+            JENA POS is a point-of-sale and inventory management system designed for small businesses. We provide tools for tracking sales, managing stock, and generating reports.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">3. Subscription and Payments</h2>
+          <p>
+            The App offers a 3-month free trial for the first business profile. After the trial, a one-time fee of $10 is required for lifetime access to that profile. Additional business profiles require a monthly subscription.
+          </p>
+          <p>
+            Payments are non-refundable once processed. We use third-party payment processors and do not store your full credit card details.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">4. User Accounts</h2>
+          <p>
+            You are responsible for maintaining the confidentiality of your account credentials. You agree to notify us immediately of any unauthorized use of your account.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">5. Data Ownership</h2>
+          <p>
+            You retain all rights to the data you input into the App. We do not claim ownership of your business data. However, you grant us a license to host and process this data to provide the service.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">6. Limitation of Liability</h2>
+          <p>
+            JENA POS is provided "as is" without warranties of any kind. We are not liable for any direct, indirect, or incidental damages arising from your use of the App, including data loss or business interruption.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">7. Changes to Terms</h2>
+          <p>
+            We reserve the right to modify these terms at any time. Continued use of the App after changes constitutes acceptance of the new terms.
+          </p>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function PrivacyPolicy({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="max-w-4xl mx-auto py-12 px-6 space-y-8">
+      <button 
+        onClick={onBack}
+        className="flex items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors mb-8 group"
+      >
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+        <span className="text-sm font-bold uppercase tracking-widest">Back</span>
+      </button>
+
+      <div className="space-y-4">
+        <h1 className="text-5xl font-black text-zinc-100 tracking-tighter uppercase italic">Privacy Policy</h1>
+        <p className="text-zinc-500 font-medium">Last updated: April 5, 2026</p>
+      </div>
+
+      <div className="prose prose-invert max-w-none space-y-8 text-zinc-400 leading-relaxed">
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">1. Information We Collect</h2>
+          <p>
+            We collect information you provide directly to us, such as when you create an account, update your profile, or input business data (sales, inventory, expenses). This includes your name, email address, and business details.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">2. How We Use Your Information</h2>
+          <p>
+            We use the information we collect to:
+          </p>
+          <ul className="list-disc pl-6 space-y-2">
+            <li>Provide, maintain, and improve our services.</li>
+            <li>Process transactions and send related information.</li>
+            <li>Send you technical notices, updates, and support messages.</li>
+            <li>Monitor and analyze trends, usage, and activities.</li>
+          </ul>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">3. Data Security</h2>
+          <p>
+            We take reasonable measures to help protect information about you from loss, theft, misuse, and unauthorized access. We use encryption and secure servers to store your data.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">4. Sharing of Information</h2>
+          <p>
+            We do not share your personal or business data with third parties except as required by law or to provide the service (e.g., with payment processors). We never sell your data to advertisers.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">5. Your Choices</h2>
+          <p>
+            You can update or delete your account information at any time through the App's settings. You can also request a full export of your data.
+          </p>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-2xl font-bold text-zinc-100">6. Cookies</h2>
+          <p>
+            We use cookies to maintain your session and remember your preferences. You can disable cookies in your browser, but some features of the App may not function correctly.
+          </p>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
+  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+  const [isAccepted, setIsAccepted] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  const handleScroll = () => {
+    if (scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      // If we're within 20px of the bottom, consider it scrolled to bottom
+      if (scrollHeight - scrollTop <= clientHeight + 20) {
+        setHasScrolledToBottom(true);
+      }
+    }
+  };
+
+  const handleAccept = async () => {
+    if (!isAccepted || !hasScrolledToBottom) return;
+    setIsProcessing(true);
+    try {
+      await updateDocument('users', userProfile.uid, {
+        termsAcceptedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to accept terms:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-zinc-950/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+      >
+        <div className="p-8 border-b border-zinc-800 shrink-0">
+          <div className="flex items-center gap-4 mb-2">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 flex items-center justify-center border border-indigo-600/20">
+              <ShieldCheck className="w-6 h-6 text-indigo-500" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-zinc-100 tracking-tighter uppercase italic">Welcome to JENA POS</h2>
+              <p className="text-sm text-zinc-500">Please review and accept our terms to continue</p>
+            </div>
+          </div>
+          <div className="mt-6 p-4 bg-indigo-600/5 border border-indigo-600/20 rounded-2xl">
+            <p className="text-xs text-indigo-400 font-medium italic">
+              Tip: Please scroll to the very bottom of this window to enable the acceptance checkbox.
+            </p>
+          </div>
+        </div>
+
+        <div 
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar"
+        >
+          <div className="prose prose-invert max-w-none space-y-8 text-zinc-400 leading-relaxed">
+            <section className="space-y-4">
+              <h3 className="text-xl font-bold text-zinc-100 uppercase tracking-tight">Terms & Conditions</h3>
+              <p>By using JENA POS, you agree to these terms. JENA POS provides inventory and sales management tools for small businesses. We offer a 3-month free trial for your first shop, followed by a one-time $10 fee for lifetime access. Additional shops require a monthly subscription.</p>
+              <p>You are responsible for your account security and data accuracy. We are not liable for business interruptions or data loss. We reserve the right to modify these terms at any time.</p>
+            </section>
+
+            <section className="space-y-4">
+              <h3 className="text-xl font-bold text-zinc-100 uppercase tracking-tight">Privacy Policy</h3>
+              <p>We collect your email, name, and business data to provide our services. We use industry-standard encryption to protect your data. We do not sell your data to third parties. We use cookies to maintain your session and preferences.</p>
+              <p>You retain ownership of your data and can export or delete it at any time through the settings panel.</p>
+            </section>
+          </div>
+        </div>
+
+        <div className="p-8 border-t border-zinc-800 bg-zinc-900/50 shrink-0 space-y-6">
+          <label className={cn(
+            "flex items-start gap-3 cursor-pointer group transition-opacity",
+            !hasScrolledToBottom && "opacity-50 cursor-not-allowed"
+          )}>
+            <div className="relative flex items-center mt-1">
+              <input 
+                type="checkbox" 
+                checked={isAccepted}
+                onChange={(e) => setIsAccepted(e.target.checked)}
+                disabled={!hasScrolledToBottom}
+                className="peer h-5 w-5 appearance-none rounded-md border border-zinc-700 bg-zinc-800 checked:bg-indigo-600 checked:border-indigo-600 transition-all cursor-pointer disabled:cursor-not-allowed"
+              />
+              <ShieldCheck className="absolute h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 left-0.5 pointer-events-none transition-opacity" />
+            </div>
+            <span className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors">
+              I have read and agree to the <span className="text-zinc-200 font-bold">Terms & Conditions</span> and <span className="text-zinc-200 font-bold">Privacy Policy</span>.
+            </span>
+          </label>
+
+          <button 
+            onClick={handleAccept}
+            disabled={!isAccepted || !hasScrolledToBottom || isProcessing}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-black py-4 rounded-2xl transition-all uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/10"
+          >
+            {isProcessing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <Sparkles className="w-5 h-5" />
+                Accept and Continue
+              </>
+            )}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: 'light' | 'dark') => void }) {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate' | 'terms' | 'privacy'>('dashboard');
   const [navigationHistory, setNavigationHistory] = useState<string[]>(['dashboard']);
   const [highlightedTxId, setHighlightedTxId] = useState<string | null>(null);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
@@ -6482,6 +6738,8 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                 {activeTab === 'expenses-analytics' && <ExpensesAnalytics />}
                 {activeTab === 'profit-analytics' && <ProfitAnalytics />}
                 {activeTab === 'affiliate' && <AffiliateView user={user} showNotification={showNotification} />}
+                {activeTab === 'terms' && <TermsAndConditions onBack={() => setActiveTab(navigationHistory[navigationHistory.length - 2] as any || 'dashboard')} />}
+                {activeTab === 'privacy' && <PrivacyPolicy onBack={() => setActiveTab(navigationHistory[navigationHistory.length - 2] as any || 'dashboard')} />}
               {activeTab === 'settings' && (
               <div className="max-w-6xl mx-auto space-y-8 pb-20">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
@@ -7006,8 +7264,18 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               <span className="text-[10px] text-zinc-600 italic">Terms & Conditions apply</span>
             </div>
             <div className="flex items-center gap-6">
-              <button className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest transition-colors">Terms & Conditions</button>
-              <button className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest transition-colors">Privacy Policy</button>
+              <button 
+                onClick={() => setActiveTab('terms')}
+                className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest transition-colors"
+              >
+                Terms & Conditions
+              </button>
+              <button 
+                onClick={() => setActiveTab('privacy')}
+                className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest transition-colors"
+              >
+                Privacy Policy
+              </button>
               <button className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest transition-colors">Contact Support</button>
             </div>
           </div>
@@ -7191,7 +7459,7 @@ function AuthScreen() {
 }
 
 function AppContent() {
-  const { user, loading, isAuthReady } = useFirebase();
+  const { user, userProfile, loading, isAuthReady } = useFirebase();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -7245,7 +7513,14 @@ function AppContent() {
     );
   }
 
-  return user ? <MainApp theme={theme} setTheme={setTheme} /> : <AuthScreen />;
+  if (user) {
+    if (userProfile && !userProfile.termsAcceptedAt) {
+      return <TermsAcceptanceModal userProfile={userProfile} />;
+    }
+    return <MainApp theme={theme} setTheme={setTheme} />;
+  }
+  
+  return <AuthScreen />;
 }
 
 export default function App() {
