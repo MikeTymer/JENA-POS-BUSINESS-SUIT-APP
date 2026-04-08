@@ -45,8 +45,15 @@ export function getCurrencySymbol(currency?: string) {
   }
 }
 
-export function formatDate(date: string | Date) {
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-  }).format(new Date(date));
+export function formatDate(date: string | Date | undefined) {
+  if (!date) return 'N/A';
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'N/A';
+    return new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium',
+    }).format(d);
+  } catch (error) {
+    return 'N/A';
+  }
 }

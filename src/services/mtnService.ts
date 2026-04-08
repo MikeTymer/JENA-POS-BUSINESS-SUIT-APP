@@ -82,6 +82,39 @@ class MTNMoMoService {
     const data = await response.json();
     return data.status;
   }
+
+  async transfer(amount: number, currency: string, phoneNumber: string, externalId: string): Promise<string> {
+    const response = await fetch('/api/momo/transfer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        body: {
+          amount: amount.toString(),
+          currency: currency,
+          externalId: externalId,
+          payee: {
+            partyIdType: 'MSISDN',
+            partyId: phoneNumber,
+          },
+          payerMessage: 'Affiliate Commission Payout',
+          payeeNote: 'JENA POS Affiliate Program',
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const message = errorData.details 
+        ? `${errorData.error}: ${errorData.details}` 
+        : (errorData.error || 'MTN MoMo Transfer failed');
+      throw new Error(message);
+    }
+
+    const { referenceId } = await response.json();
+    return referenceId;
+  }
 }
 
 export const mtnMoMoService = new MTNMoMoService();

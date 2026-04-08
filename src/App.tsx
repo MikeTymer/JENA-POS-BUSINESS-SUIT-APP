@@ -27,6 +27,7 @@ import {
   Building2,
   Menu,
   X,
+  Lock,
   CreditCard,
   Check,
   ArrowUpRight,
@@ -47,6 +48,7 @@ import {
   FileUp,
   FileDown,
   AlertTriangle,
+  AlertCircle,
   MousePointer2,
   Image as ImageIcon,
   Camera,
@@ -65,7 +67,8 @@ import {
   User,
   Share2,
   Copy,
-  Phone
+  Phone,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -96,7 +99,7 @@ import {
   updateDocument,
   setDocument
 } from './lib/firestore';
-import { where, doc, getDoc, getDocs, collection, query } from 'firebase/firestore';
+import { where, doc, getDoc, getDocs, collection, query, onSnapshot } from 'firebase/firestore';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -3311,7 +3314,7 @@ function Transactions({ showNotification, createNotification, permissions, highl
   const { currentOrg, userProfile, db } = useFirebase();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isAdding, setIsAdding] = useState(false);
-  const [newTx, setNewTx] = useState({ type: 'income' as const, amount: 0, category: '', description: '', date: new Date().toISOString().slice(0, 16) });
+  const [newTx, setNewTx] = useState({ type: 'income' as 'income' | 'expense', amount: 0, category: '', description: '', date: new Date().toISOString().slice(0, 16) });
   
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
@@ -4824,7 +4827,7 @@ function getPlanPrice(ugxPrice: number, currency?: string) {
 
 interface Notification {
   id: string;
-  type: 'sale' | 'login' | 'logout' | 'system';
+  type: 'sale' | 'login' | 'logout' | 'system' | 'inventory' | 'damage' | 'expense';
   title: string;
   message: string;
   timestamp: string;
@@ -5297,7 +5300,7 @@ function ProfitAnalytics() {
   );
 }
 
-function AffiliateView({ user, showNotification }: { user: any, showNotification: (m: string, t?: 'success' | 'error') => void }) {
+function AffiliateView({ user, showNotification, setActiveTab }: { user: any, showNotification: (m: string, t?: 'success' | 'error') => void, setActiveTab: (tab: any) => void }) {
   const [affiliate, setAffiliate] = useState<any>(null);
   const [referrals, setReferrals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -5306,23 +5309,28 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
   useEffect(() => {
     if (!user) return;
 
-    const fetchAffiliateData = async () => {
-      try {
-        const affiliateDoc = await getDoc(doc(db, 'affiliates', user.uid));
-        if (affiliateDoc.exists()) {
-          setAffiliate(affiliateDoc.data());
-          
-          const referralsSnap = await getDocs(query(collection(db, 'referrals'), where('affiliateUid', '==', user.uid)));
-          setReferrals(referralsSnap.docs.map(d => d.data()));
-        }
-      } catch (error) {
-        console.error('Error fetching affiliate data:', error);
-      } finally {
-        setLoading(false);
+    const affiliateRef = doc(db, 'affiliates', user.uid);
+    const unsubscribeAffiliate = onSnapshot(affiliateRef, (doc) => {
+      if (doc.exists()) {
+        setAffiliate(doc.data());
       }
-    };
+      setLoading(false);
+    }, (error) => {
+      console.error('Error listening to affiliate data:', error);
+      setLoading(false);
+    });
 
-    fetchAffiliateData();
+    const referralsQuery = query(collection(db, 'referrals'), where('affiliateUid', '==', user.uid));
+    const unsubscribeReferrals = onSnapshot(referralsQuery, (snapshot) => {
+      setReferrals(snapshot.docs.map(d => d.data()));
+    }, (error) => {
+      console.error('Error listening to referrals:', error);
+    });
+
+    return () => {
+      unsubscribeAffiliate();
+      unsubscribeReferrals();
+    };
   }, [user]);
 
   const handleJoinProgram = async () => {
@@ -5336,6 +5344,7 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
         status: 'active',
         totalEarnings: 0,
         unpaidEarnings: 0,
+        totalClicks: 0,
         createdAt: new Date().toISOString()
       };
       await setDocument('affiliates', user.uid, newAffiliate);
@@ -5374,7 +5383,7 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
           <div className="space-y-4">
             <h2 className="text-4xl font-black text-zinc-100 uppercase tracking-tighter">Join Our Affiliate Program</h2>
             <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-              Share JENA POS with your network and earn money for every business that signs up and makes their one-time payment.
+              Share JENA POS with your network and earn a <span className="text-indigo-500 font-bold">10% commission</span> for every business that signs up and makes their one-time payment.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
@@ -5396,8 +5405,8 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
               <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center mb-4">
                 <DollarSign className="w-5 h-5 text-amber-500" />
               </div>
-              <h3 className="font-bold text-zinc-100 mb-2">3. Get Paid</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">Earn a commission for every referred user who completes their one-time payment.</p>
+              <h3 className="font-bold text-zinc-100 mb-2">3. Get Paid (10%)</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">Earn a 10% commission for every referred user who completes their one-time payment. Paid via Mobile Money.</p>
             </div>
           </div>
           <button
@@ -5432,8 +5441,16 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
           <button
             onClick={copyReferralLink}
             className="p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition-colors shadow-lg shadow-indigo-600/20"
+            title="Copy Link"
           >
             <Copy className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setActiveTab('affiliate-referrals')}
+            className="p-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl transition-colors border border-zinc-700"
+            title="View Registered Referrals"
+          >
+            <Users className="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -5446,7 +5463,7 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
             </div>
             <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Total Earned</span>
           </div>
-          <p className="text-3xl font-black text-zinc-100">{formatCurrency(affiliate.totalEarnings, 'USD')}</p>
+          <p className="text-3xl font-black text-zinc-100">{formatCurrency(affiliate.totalEarnings, 'UGX')}</p>
           <p className="text-xs text-zinc-500 mt-1">Lifetime earnings</p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
@@ -5456,7 +5473,7 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
             </div>
             <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Unpaid Balance</span>
           </div>
-          <p className="text-3xl font-black text-zinc-100">{formatCurrency(affiliate.unpaidEarnings, 'USD')}</p>
+          <p className="text-3xl font-black text-zinc-100">{formatCurrency(affiliate.unpaidEarnings, 'UGX')}</p>
           <p className="text-xs text-zinc-500 mt-1">Available for withdrawal</p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
@@ -5494,6 +5511,7 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
             <thead>
               <tr className="bg-zinc-800/50 border-b border-zinc-800">
                 <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Date</th>
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Business / Email</th>
                 <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Status</th>
                 <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest text-right">Commission</th>
               </tr>
@@ -5501,11 +5519,19 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
             <tbody className="divide-y divide-zinc-800">
               {referrals.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center text-zinc-500">No referrals yet. Start sharing your link!</td>
+                  <td colSpan={4} className="px-6 py-12 text-center text-zinc-500">No referrals yet. Start sharing your link!</td>
                 </tr>
               ) : referrals.map((ref, idx) => (
                 <tr key={idx} className="hover:bg-zinc-800/30 transition-colors">
                   <td className="px-6 py-4 text-sm text-zinc-400">{formatDate(ref.createdAt)}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-zinc-100">{ref.referredOrgName || 'New Business'}</span>
+                      <span className="text-xs text-zinc-500">
+                        {(!ref.referredEmail || ['n/a', 'undefined', 'null', ''].includes(String(ref.referredEmail).toLowerCase())) ? 'Old Record' : ref.referredEmail}
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <span className={cn(
                       "px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest",
@@ -5517,7 +5543,92 @@ function AffiliateView({ user, showNotification }: { user: any, showNotification
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm font-bold text-zinc-100 text-right">
-                    {formatCurrency(ref.amountEarned || 0, 'USD')}
+                    {formatCurrency(ref.amountEarned || 0, 'UGX')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReferralsListView({ user, onBack }: { user: any, onBack: () => void }) {
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    const referralsQuery = query(collection(db, 'referrals'), where('affiliateUid', '==', user.uid));
+    const unsubscribe = onSnapshot(referralsQuery, (snapshot) => {
+      setReferrals(snapshot.docs.map(d => d.data()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setLoading(false);
+    }, (error) => {
+      console.error('Error listening to referrals:', error);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  return (
+    <div className="space-y-8 pb-20">
+      <div className="flex items-center gap-4">
+        <button 
+          onClick={onBack}
+          className="p-2 hover:bg-zinc-800 rounded-xl text-zinc-400 transition-colors"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <div>
+          <h2 className="text-3xl font-bold text-zinc-100 uppercase tracking-tighter italic">Referred Businesses</h2>
+          <p className="text-zinc-500 font-medium">Detailed list of all your registered referrals</p>
+        </div>
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-zinc-800/50 border-b border-zinc-800">
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Date</th>
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Business Name</th>
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Owner Email</th>
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Status</th>
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest text-right">Commission</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center">
+                    <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mx-auto" />
+                  </td>
+                </tr>
+              ) : referrals.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">No referrals found.</td>
+                </tr>
+              ) : referrals.map((ref, idx) => (
+                <tr key={idx} className="hover:bg-zinc-800/30 transition-colors">
+                  <td className="px-6 py-4 text-sm text-zinc-400">{formatDate(ref.createdAt)}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-zinc-100">{ref.referredOrgName || 'N/A'}</td>
+                  <td className="px-6 py-4 text-sm text-zinc-400">
+                    {(!ref.referredEmail || ['n/a', 'undefined', 'null', ''].includes(String(ref.referredEmail).toLowerCase())) ? 'Not captured (Old Record)' : ref.referredEmail}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={cn(
+                      "px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest",
+                      ref.status === 'completed' ? "bg-emerald-500/10 text-emerald-500" :
+                      ref.status === 'paid' ? "bg-blue-500/10 text-blue-500" :
+                      "bg-zinc-500/10 text-zinc-500"
+                    )}>
+                      {ref.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-bold text-zinc-100 text-right">
+                    {formatCurrency(ref.amountEarned || 0, 'UGX')}
                   </td>
                 </tr>
               ))}
@@ -5778,27 +5889,57 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
   const [isAccepted, setIsAccepted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const checkScroll = () => {
+      if (scrollRef.current) {
+        const { scrollHeight, clientHeight } = scrollRef.current;
+        // If content is shorter than container, or already at bottom
+        if (scrollHeight <= clientHeight + 20) {
+          setHasScrolledToBottom(true);
+        }
+      }
+    };
+    
+    // Check after a short delay to ensure content is rendered
+    const timer = setTimeout(checkScroll, 500);
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, []);
 
   const handleScroll = () => {
     if (scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      // If we're within 20px of the bottom, consider it scrolled to bottom
-      if (scrollHeight - scrollTop <= clientHeight + 20) {
+      // Even more lenient: If we're within 50px of the bottom
+      if (scrollHeight - scrollTop <= clientHeight + 50) {
         setHasScrolledToBottom(true);
       }
     }
   };
 
+  const isSuperAdmin = userProfile?.email === 'sakwamikes@gmail.com';
+
   const handleAccept = async () => {
-    if (!isAccepted || !hasScrolledToBottom) return;
+    if (!isAccepted || (!hasScrolledToBottom && !isSuperAdmin)) return;
     setIsProcessing(true);
+    setError(null);
     try {
-      await updateDocument('users', userProfile.uid, {
+      console.log('Attempting to accept terms for user:', userProfile.uid);
+      const success = await updateDocument('users', userProfile.uid, {
         termsAcceptedAt: new Date().toISOString()
       });
-    } catch (error) {
-      console.error("Failed to accept terms:", error);
+      if (!success) {
+        throw new Error("The server rejected the update. This might be a security rule issue. Please contact support.");
+      }
+      console.log('Terms accepted successfully');
+    } catch (err: any) {
+      console.error("Failed to accept terms:", err);
+      setError(err.message || "An unexpected error occurred. Please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -5851,14 +5992,14 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
         <div className="p-8 border-t border-zinc-800 bg-zinc-900/50 shrink-0 space-y-6">
           <label className={cn(
             "flex items-start gap-3 cursor-pointer group transition-opacity",
-            !hasScrolledToBottom && "opacity-50 cursor-not-allowed"
+            (!hasScrolledToBottom && !isSuperAdmin) && "opacity-50 cursor-not-allowed"
           )}>
             <div className="relative flex items-center mt-1">
               <input 
                 type="checkbox" 
                 checked={isAccepted}
                 onChange={(e) => setIsAccepted(e.target.checked)}
-                disabled={!hasScrolledToBottom}
+                disabled={!hasScrolledToBottom && !isSuperAdmin}
                 className="peer h-5 w-5 appearance-none rounded-md border border-zinc-700 bg-zinc-800 checked:bg-indigo-600 checked:border-indigo-600 transition-all cursor-pointer disabled:cursor-not-allowed"
               />
               <ShieldCheck className="absolute h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 left-0.5 pointer-events-none transition-opacity" />
@@ -5868,9 +6009,20 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
             </span>
           </label>
 
+          {isSuperAdmin && !hasScrolledToBottom && (
+            <p className="text-[10px] text-indigo-400 italic">Admin: Scroll bypass enabled</p>
+          )}
+
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+              <p className="text-sm text-red-500 font-medium">{error}</p>
+            </div>
+          )}
+
           <button 
             onClick={handleAccept}
-            disabled={!isAccepted || !hasScrolledToBottom || isProcessing}
+            disabled={!isAccepted || (!hasScrolledToBottom && !isSuperAdmin) || isProcessing}
             className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-black py-4 rounded-2xl transition-all uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/10"
           >
             {isProcessing ? (
@@ -5908,7 +6060,12 @@ function MomoPaymentModal({ planName, price, currency, onClose, onConfirm, isPro
         <div className="flex justify-between items-start">
           <div className="space-y-1">
             <h3 className="text-2xl font-black text-zinc-100 uppercase tracking-tighter italic">Mobile Money Checkout</h3>
-            <p className="text-zinc-400 text-sm">Complete your subscription for <span className="text-amber-500 font-bold uppercase">{planName}</span></p>
+            <div className="flex items-center gap-2">
+              <p className="text-zinc-400 text-sm">Complete your subscription for <span className="text-amber-500 font-bold uppercase">{planName}</span></p>
+              {import.meta.env.VITE_MTN_MOMO_TARGET_ENVIRONMENT === 'mtnuganda' && (
+                <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full uppercase tracking-widest border border-emerald-500/20">Production</span>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors">
             <X className="w-6 h-6 text-zinc-500" />
@@ -5966,7 +6123,7 @@ function MomoPaymentModal({ planName, price, currency, onClose, onConfirm, isPro
 
 function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: 'light' | 'dark') => void }) {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate' | 'terms' | 'privacy'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate' | 'affiliate-referrals' | 'terms' | 'privacy'>('dashboard');
   const [navigationHistory, setNavigationHistory] = useState<string[]>(['dashboard']);
   const [highlightedTxId, setHighlightedTxId] = useState<string | null>(null);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
@@ -6138,7 +6295,8 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     
     const plan = PLAN_DETAILS[planName as keyof typeof PLAN_DETAILS] || PLAN_DETAILS.starter;
     const ugxPrice = plan.price;
-    const isSandbox = (import.meta.env.VITE_MTN_MOMO_TARGET_ENVIRONMENT || 'production') === 'sandbox';
+    const targetEnv = import.meta.env.VITE_MTN_MOMO_TARGET_ENVIRONMENT || 'mtnuganda';
+    const isSandbox = targetEnv === 'sandbox';
     const currency = isSandbox ? 'EUR' : 'UGX';
     
     // Convert price if using EUR in sandbox (approx 1 EUR = 4100 UGX)
@@ -6169,14 +6327,27 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
           
           let status: 'SUCCESSFUL' | 'FAILED' | 'PENDING' = 'PENDING';
           let attempts = 0;
-          while (status === 'PENDING' && attempts < 12) {
+          const maxAttempts = 20; // Increase timeout to 100 seconds (20 * 5s)
+          
+          while (status === 'PENDING' && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 5000));
-            status = await mtnMoMoService.getTransactionStatus(referenceId);
+            const currentStatus = await mtnMoMoService.getTransactionStatus(referenceId);
+            
+            // Log for debugging
+            console.log(`Payment status attempt ${attempts + 1}: ${currentStatus}`);
+            
+            if (currentStatus) {
+              status = currentStatus;
+            }
             attempts++;
           }
           
-          if (status !== 'SUCCESSFUL') {
-            throw new Error(`Mobile Money payment ${status === 'PENDING' ? 'timed out' : 'failed'}.`);
+          if (status === 'SUCCESSFUL') {
+            showNotification('Payment successful! Your account has been updated.', 'success');
+          } else if (status === 'PENDING') {
+            throw new Error('Payment timed out. If you entered your PIN, please wait a few minutes for your account to update.');
+          } else {
+            throw new Error(`Mobile Money payment failed with status: ${status || 'UNKNOWN'}.`);
           }
         } catch (momoErr: any) {
           console.error('MoMo error:', momoErr);
@@ -6231,26 +6402,76 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       }
 
       if (currentOrg.referredBy) {
-        const referralsSnap = await getDocs(query(collection(db, 'referrals'), where('referredOrgId', '==', currentOrg.id)));
-        if (!referralsSnap.empty) {
-          const referralDoc = referralsSnap.docs[0];
-          const referralData = referralDoc.data();
-          const commission = plan.price * 0.1;
-          
-          await updateDocument('referrals', referralDoc.id, {
-            status: 'paid',
-            amountEarned: commission,
-            paidAt: new Date().toISOString()
-          });
-
-          const affiliateDoc = await getDoc(doc(db, 'affiliates', referralData.affiliateUid));
-          if (affiliateDoc.exists()) {
-            const affiliateData = affiliateDoc.data();
-            await updateDocument('affiliates', referralData.affiliateUid, {
-              totalEarnings: (affiliateData.totalEarnings || 0) + commission,
-              unpaidEarnings: (affiliateData.unpaidEarnings || 0) + commission
+        try {
+          console.log('Processing referral for org:', currentOrg.id, 'Referred by:', currentOrg.referredBy);
+          const referralsSnap = await getDocs(query(collection(db, 'referrals'), where('referredOrgId', '==', currentOrg.id)));
+          if (!referralsSnap.empty) {
+            const referralDoc = referralsSnap.docs[0];
+            const referralData = referralDoc.data();
+            const commission = plan.price * 0.1;
+            console.log('Referral found! ID:', referralDoc.id, 'Commission:', commission);
+            
+            await updateDocument('referrals', referralDoc.id, {
+              status: 'paid',
+              amountEarned: commission,
+              paidAt: new Date().toISOString()
             });
+
+            console.log('Updating affiliate earnings for:', referralData.affiliateUid);
+            const affiliateDoc = await getDoc(doc(db, 'affiliates', referralData.affiliateUid));
+            if (affiliateDoc.exists()) {
+              const affiliateData = affiliateDoc.data();
+              
+              // Attempt to transfer commission via Mobile Money
+              try {
+                const affiliateUserDoc = await getDoc(doc(db, 'users', referralData.affiliateUid));
+                if (affiliateUserDoc.exists()) {
+                  const affiliateUser = affiliateUserDoc.data();
+                  const affiliatePhone = affiliateUser.phoneNumber;
+                  
+                  if (affiliatePhone) {
+                    console.log('Initiating commission transfer to:', affiliatePhone);
+                    // In sandbox, we use EUR. In production, we use UGX.
+                    const transferCurrency = isSandbox ? 'EUR' : (import.meta.env.VITE_MTN_MOMO_CURRENCY || 'UGX');
+                    const transferAmount = transferCurrency === 'EUR' ? Math.ceil(commission / 4100) : commission;
+                    
+                    await mtnMoMoService.transfer(
+                      transferAmount,
+                      transferCurrency,
+                      affiliatePhone,
+                      `comm_${referralDoc.id}`
+                    );
+                    
+                    // Update referral status to completed if transfer initiated
+                    await updateDocument('referrals', referralDoc.id, {
+                      status: 'completed',
+                      transferredAt: new Date().toISOString()
+                    });
+                    
+                    console.log('Commission transfer initiated successfully');
+                  } else {
+                    console.warn('Affiliate has no phone number for transfer');
+                  }
+                }
+              } catch (transferErr) {
+                console.error('Error transferring commission:', transferErr);
+                // We don't throw here, the earnings are still recorded in DB for manual payout if needed
+              }
+
+              await updateDocument('affiliates', referralData.affiliateUid, {
+                totalEarnings: (affiliateData.totalEarnings || 0) + commission,
+                unpaidEarnings: (affiliateData.unpaidEarnings || 0) + commission
+              });
+              console.log('Affiliate earnings updated successfully');
+            } else {
+              console.warn('Affiliate document not found for UID:', referralData.affiliateUid);
+            }
+          } else {
+            console.warn('No referral document found for org ID:', currentOrg.id);
           }
+        } catch (refError) {
+          console.error('Error processing referral commission:', refError);
+          // Don't throw here, so the user still gets their payment confirmation
         }
       }
 
@@ -6375,7 +6596,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     const limit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS].orgs;
     
     if (ownedOrgs.length >= limit) {
-      if (plan === 'trial' || plan === 'basic') {
+      if (plan === 'trial') {
         showNotification(`You have reached the limit of 1 free business profile. Please upgrade to a monthly subscription for more shops.`, 'error');
       } else {
         showNotification(`You have reached the limit of ${limit} business profile(s) for your current plan.`, 'error');
@@ -6394,7 +6615,8 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       
       // Check for referral code in URL
       const urlParams = new URLSearchParams(window.location.search);
-      const referralCode = urlParams.get('ref');
+      const rawReferralCode = urlParams.get('ref') || localStorage.getItem('jena_pos_ref');
+      const referralCode = rawReferralCode?.trim().toUpperCase();
 
       const success = await setDocument('organizations', orgId, {
         id: orgId,
@@ -6422,15 +6644,38 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         
         if (!affiliatesSnap.empty) {
           const affiliate = affiliatesSnap.docs[0].data();
+          
+          // Extremely robust email capture
+          let emailToSave = user?.email || userProfile?.email || auth.currentUser?.email;
+          
+          if (!emailToSave) {
+            try {
+              const userDoc = await getDoc(doc(db, 'users', user.uid));
+              if (userDoc.exists()) {
+                emailToSave = userDoc.data().email;
+              }
+            } catch (e) {
+              console.error('Error fetching user email for referral:', e);
+            }
+          }
+          
+          emailToSave = emailToSave || 'N/A';
+          
+          console.log('Creating referral record. Email:', emailToSave, 'Org:', newOrgName, 'Affiliate:', affiliate.affiliateCode);
           await setDocument('referrals', referralId, {
             id: referralId,
             affiliateUid: affiliate.uid,
             referredOrgId: orgId,
+            referredOrgName: newOrgName,
             referredUid: user.uid,
+            referredEmail: emailToSave,
             status: 'registered',
             amountEarned: 0,
             createdAt: new Date().toISOString()
           });
+          console.log('Referral record created successfully');
+        } else {
+          console.warn('No affiliate found for code:', referralCode);
         }
       }
 
@@ -6915,7 +7160,8 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                 {activeTab === 'sales-analytics' && <SalesAnalytics />}
                 {activeTab === 'expenses-analytics' && <ExpensesAnalytics />}
                 {activeTab === 'profit-analytics' && <ProfitAnalytics />}
-                {activeTab === 'affiliate' && <AffiliateView user={user} showNotification={showNotification} />}
+                {activeTab === 'affiliate' && <AffiliateView user={user} showNotification={showNotification} setActiveTab={setActiveTab} />}
+                {activeTab === 'affiliate-referrals' && <ReferralsListView user={user} onBack={() => setActiveTab('affiliate')} />}
                 {activeTab === 'terms' && <TermsAndConditions onBack={() => setActiveTab(navigationHistory[navigationHistory.length - 2] as any || 'dashboard')} />}
                 {activeTab === 'privacy' && <PrivacyPolicy onBack={() => setActiveTab(navigationHistory[navigationHistory.length - 2] as any || 'dashboard')} />}
               {activeTab === 'settings' && (
@@ -7553,6 +7799,30 @@ function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showRedirectOption, setShowRedirectOption] = useState(false);
+  const [referrerName, setReferrerName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkReferral = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const refCode = urlParams.get('ref') || localStorage.getItem('jena_pos_ref');
+      if (refCode) {
+        try {
+          const affiliatesSnap = await getDocs(query(collection(db, 'affiliates'), where('affiliateCode', '==', refCode.trim().toUpperCase())));
+          if (!affiliatesSnap.empty) {
+            const affiliateData = affiliatesSnap.docs[0].data();
+            const userDoc = await getDoc(doc(db, 'users', affiliateData.uid));
+            if (userDoc.exists()) {
+              setReferrerName(userDoc.data().displayName);
+              localStorage.setItem('jena_pos_ref', refCode.trim().toUpperCase());
+            }
+          }
+        } catch (err) {
+          console.error('Error checking referral code:', err);
+        }
+      }
+    };
+    checkReferral();
+  }, []);
 
   const handleLogin = async (useRedirect = false) => {
     setIsLoading(true);
@@ -7626,7 +7896,13 @@ function AuthScreen() {
         <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 p-8 rounded-[32px] shadow-2xl space-y-6">
           <div className="space-y-2">
             <h2 className="text-xl font-bold text-zinc-100">Get Started</h2>
-            <p className="text-sm text-zinc-500">Sign in with your Google account to access all your business organizations.</p>
+            {referrerName ? (
+              <p className="text-sm text-indigo-400 font-medium bg-indigo-500/10 py-2 px-4 rounded-xl inline-block border border-indigo-500/20">
+                You were referred by <span className="font-bold">{referrerName}</span>
+              </p>
+            ) : (
+              <p className="text-sm text-zinc-500">Sign in with your Google account to access all your business organizations.</p>
+            )}
           </div>
           
           {error && (
@@ -7716,23 +7992,35 @@ function AppContent() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const refCode = params.get('ref');
+    console.log('AppContent mounted. URL Search:', window.location.search, 'Ref Code:', refCode);
     
-    if (refCode && !sessionStorage.getItem(`ref_tracked_${refCode}`)) {
-      const trackClick = async () => {
-        try {
-          const affiliatesSnap = await getDocs(query(collection(db, 'affiliates'), where('affiliateCode', '==', refCode)));
-          if (!affiliatesSnap.empty) {
-            const affiliateDoc = affiliatesSnap.docs[0];
-            await updateDocument('affiliates', affiliateDoc.id, {
-              totalClicks: (affiliateDoc.data().totalClicks || 0) + 1
-            });
-            sessionStorage.setItem(`ref_tracked_${refCode}`, 'true');
+    if (refCode) {
+      localStorage.setItem('jena_pos_ref', refCode);
+      if (!sessionStorage.getItem(`ref_tracked_${refCode}`)) {
+        console.log('Affiliate link detected with code:', refCode);
+        const trackClick = async () => {
+          try {
+            const normalizedCode = refCode.trim().toUpperCase();
+            console.log('Searching for affiliate in Firestore with normalized code:', normalizedCode);
+            const affiliatesSnap = await getDocs(query(collection(db, 'affiliates'), where('affiliateCode', '==', normalizedCode)));
+            if (!affiliatesSnap.empty) {
+              const affiliateDoc = affiliatesSnap.docs[0];
+              const currentClicks = affiliateDoc.data().totalClicks || 0;
+              console.log('Affiliate found! Current clicks:', currentClicks, 'Incrementing for:', affiliateDoc.id);
+              await updateDocument('affiliates', affiliateDoc.id, {
+                totalClicks: currentClicks + 1
+              });
+              sessionStorage.setItem(`ref_tracked_${refCode}`, 'true');
+              console.log('Click tracked successfully!');
+            } else {
+              console.warn('Affiliate not found for code:', normalizedCode);
+            }
+          } catch (error) {
+            console.error('Error tracking referral click:', error);
           }
-        } catch (error) {
-          console.error('Error tracking referral click:', error);
-        }
-      };
-      trackClick();
+        };
+        trackClick();
+      }
     }
   }, []);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {

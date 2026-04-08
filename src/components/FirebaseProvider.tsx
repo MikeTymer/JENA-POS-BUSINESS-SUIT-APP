@@ -58,6 +58,7 @@ interface FirebaseContextType {
   currentOrg: Organization | null;
   setCurrentOrg: (org: Organization | null) => void;
   isAuthReady: boolean;
+  db: any;
 }
 
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
@@ -212,7 +213,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [ownedOrgs, staffOrgs]);
 
   return (
-    <FirebaseContext.Provider value={{ user, userProfile, loading, organizations, currentOrg, setCurrentOrg, isAuthReady }}>
+    <FirebaseContext.Provider value={{ user, userProfile, loading, organizations, currentOrg, setCurrentOrg, isAuthReady, db }}>
       {children}
     </FirebaseContext.Provider>
   );

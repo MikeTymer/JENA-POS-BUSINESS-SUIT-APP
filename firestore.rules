@@ -54,13 +54,15 @@ service cloud.firestore {
     // ===============================================================
     // Domain Validators
     // ===============================================================
-    function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'phoneNumber', 'plan', 'termsAcceptedAt', 'notificationPreferences', 'createdAt', 'updatedAt']) &&
-             data.uid is string && data.email is string &&
-             data.uid == request.auth.uid &&
+    function isValidUser(data, userId) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'phoneNumber', 'plan', 'termsAcceptedAt', 'notificationPreferences', 'createdAt', 'updatedAt', 'role']) &&
+             userId == request.auth.uid &&
+             (!('uid' in data) || data.uid == request.auth.uid) &&
+             (!('email' in data) || data.email is string || data.email == null) &&
              (!('plan' in data) || data.plan in ['trial', 'starter', 'business', 'enterprise']) &&
              (!('termsAcceptedAt' in data) || data.termsAcceptedAt is string) &&
-             (!('notificationPreferences' in data) || data.notificationPreferences is map);
+             (!('notificationPreferences' in data) || data.notificationPreferences is map) &&
+             (!('role' in data) || data.role is string);
     }
 
     function isValidOrganization(data) {
@@ -94,7 +96,7 @@ service cloud.firestore {
     }
 
     function isValidReferral(data) {
-      return hasOnlyAllowedFields(['id', 'affiliateUid', 'referredOrgId', 'referredUid', 'status', 'amountEarned', 'createdAt', 'paidAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['id', 'affiliateUid', 'referredOrgId', 'referredOrgName', 'referredUid', 'referredEmail', 'status', 'amountEarned', 'createdAt', 'paidAt', 'updatedAt']) &&
              data.affiliateUid is string &&
              data.referredOrgId is string &&
              data.status in ['registered', 'paid', 'completed'];
@@ -168,8 +170,8 @@ service cloud.firestore {
     // ===============================================================
     match /users/{userId} {
       allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data, userId);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data, userId);
     }
 
     match /memberships/{membershipId} {
@@ -249,17 +251,19 @@ service cloud.firestore {
     }
 
     match /affiliates/{affiliateUid} {
-      allow read: if isOwner(affiliateUid);
+      // Allow public read so referral links can find the affiliate and track clicks
+      allow read: if true;
       allow create: if isOwner(affiliateUid) && isValidAffiliate(request.resource.data);
       allow update: if (isAuthenticated() && isOwner(affiliateUid) && isValidAffiliate(request.resource.data)) || 
-                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks']) && 
-                       request.resource.data.totalClicks == resource.data.totalClicks + 1);
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks', 'updatedAt']) && 
+                       request.resource.data.totalClicks == (resource.data.get('totalClicks', 0) + 1)) ||
+                      (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalEarnings', 'unpaidEarnings', 'updatedAt']));
     }
 
     match /referrals/{referralId} {
-      allow read: if isAuthenticated() && (isSuperAdmin() || resource.data.affiliateUid == request.auth.uid);
+      allow read: if isAuthenticated() && (isSuperAdmin() || resource.data.affiliateUid == request.auth.uid || resource.data.referredUid == request.auth.uid);
       allow create: if isAuthenticated(); // System creates this upon registration
-      allow update: if isSuperAdmin();
+      allow update: if isAuthenticated() && (isSuperAdmin() || resource.data.referredUid == request.auth.uid);
     }
 
     match /payments/{paymentId} {
