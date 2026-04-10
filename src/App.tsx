@@ -102,7 +102,7 @@ import {
   updateDocument,
   setDocument
 } from './lib/firestore';
-import { where, doc, getDoc, getDocs, collection, query, onSnapshot } from 'firebase/firestore';
+import { where, doc, getDoc, getDocs, collection, query, onSnapshot, increment, updateDoc } from 'firebase/firestore';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -170,7 +170,7 @@ interface StaffMember {
   uid?: string;
   email: string;
   displayName?: string;
-  role: 'admin' | 'manager' | 'cashier';
+  role: 'director' | 'manager' | 'cashier';
   addedAt: string;
 }
 
@@ -197,6 +197,9 @@ interface DebtPayment {
 interface ReceiptData {
   id: string;
   transactionId: string;
+  customerId?: string;
+  customerName?: string;
+  dueDate?: string;
   items: {
     name: string;
     quantity: number;
@@ -353,6 +356,20 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
     doc.text(`Date: ${formatDate(receipt.date)}`, 40, y, { align: 'center' });
     y += 6;
 
+    if (receipt.customerName) {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Customer: ${receipt.customerName}`, margin, y);
+      y += 4;
+      if (receipt.dueDate) {
+        doc.setTextColor(200, 0, 0);
+        doc.text(`Due Date: ${formatDate(receipt.dueDate)}`, margin, y);
+        doc.setTextColor(0);
+        y += 4;
+      }
+      y += 2;
+    }
+
     // Items
     doc.setDrawColor(200);
     doc.line(margin, y, 80 - margin, y);
@@ -440,6 +457,12 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
             ID: {receipt.id}<br/>
             Date: {formatDate(receipt.date)}
           </div>
+          {receipt.customerName && (
+            <div className="pt-2 space-y-1 text-left border-t border-slate-200 mt-2">
+              <p className="text-xs font-bold text-black">Customer: <span className="font-normal">{receipt.customerName}</span></p>
+              {receipt.dueDate && <p className="text-xs font-bold text-rose-600">Payment Due: <span className="font-normal">{formatDate(receipt.dueDate)}</span></p>}
+            </div>
+          )}
           {isMedical && (receipt.patientName || receipt.prescriptionNumber || receipt.doctorName) && (
             <div className="pt-2 space-y-1 text-left border-t border-slate-200 mt-2">
               {receipt.patientName && <p className="text-xs font-bold text-black">Patient: <span className="font-normal">{receipt.patientName}</span></p>}
@@ -1519,11 +1542,13 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [isAddingStaff, setIsAddingStaff] = useState(false);
   const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [newStaffRole, setNewStaffRole] = useState<'admin' | 'manager' | 'cashier'>('cashier');
+  const [newStaffRole, setNewStaffRole] = useState<'director' | 'manager' | 'cashier'>('cashier');
   
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [editingOrgName, setEditingOrgName] = useState('');
   const [deletingOrgId, setDeletingOrgId] = useState<string | null>(null);
+  const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [adminTab, setAdminTab] = useState<'my-businesses' | 'staff' | 'settings'>('my-businesses');
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
@@ -1577,6 +1602,41 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
     const prev = newHistory[newHistory.length - 1];
     setAdminHistory(newHistory);
     setAdminTab(prev as any);
+  };
+
+  const handleBulkCleanup = async () => {
+    const ownedOrgs = organizations.filter(o => o.ownerUid === user?.uid);
+    if (ownedOrgs.length <= 1) {
+      showNotification('You only have one organization. No cleanup needed.');
+      return;
+    }
+
+    setIsCleaningUp(true);
+    try {
+      // Sort by createdAt descending to keep the most recent one
+      const sorted = [...ownedOrgs].sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      const toKeep = sorted[0];
+      const toDelete = sorted.slice(1);
+
+      showNotification(`Cleaning up ${toDelete.length} organizations...`, 'success');
+
+      for (const org of toDelete) {
+        await handleDeleteOrg(org.id);
+      }
+
+      showNotification('Cleanup complete! Only your most recent organization remains.');
+    } catch (error) {
+      console.error('Cleanup error:', error);
+      showNotification('Cleanup failed.', 'error');
+    } finally {
+      setIsCleaningUp(false);
+      setShowCleanupConfirm(false);
+    }
   };
 
   const ownedOrgs = isSuperAdmin ? organizations : organizations.filter(o => o.ownerUid === user?.uid);
@@ -1636,20 +1696,66 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
 
   const handleRemoveStaff = async (staffId: string) => {
     if (!currentOrg) return;
-    const success = await removeDocument(`organizations/${currentOrg.id}/staff`, staffId);
-    if (success) {
-      showNotification('Staff member removed');
-    } else {
+    
+    const staffMember = staff.find(s => s.id === staffId);
+    if (!staffMember) return;
+
+    try {
+      // 1. Remove from staff subcollection
+      const success = await removeDocument(`organizations/${currentOrg.id}/staff`, staffId);
+      
+      if (success) {
+        // 2. Remove from memberships collection
+        const q = query(
+          collection(db, 'memberships'),
+          where('orgId', '==', currentOrg.id),
+          where('email', '==', staffMember.email)
+        );
+        const snapshot = await getDocs(q);
+        const removePromises = snapshot.docs.map(doc => 
+          removeDocument('memberships', doc.id)
+        );
+        await Promise.all(removePromises);
+        
+        showNotification('Staff member removed');
+      } else {
+        showNotification('Failed to remove staff member', 'error');
+      }
+    } catch (error) {
+      console.error('Error removing staff:', error);
       showNotification('Failed to remove staff member', 'error');
     }
   };
 
-  const handleUpdateRole = async (staffId: string, newRole: 'admin' | 'manager' | 'cashier') => {
+  const handleUpdateRole = async (staffId: string, newRole: 'director' | 'manager' | 'cashier') => {
     if (!currentOrg) return;
-    const success = await updateDocument(`organizations/${currentOrg.id}/staff`, staffId, { role: newRole });
-    if (success) {
-      showNotification('Role updated');
-    } else {
+    
+    const staffMember = staff.find(s => s.id === staffId);
+    if (!staffMember) return;
+
+    try {
+      // 1. Update staff subcollection
+      const success = await updateDocument(`organizations/${currentOrg.id}/staff`, staffId, { role: newRole });
+      
+      if (success) {
+        // 2. Update membership collection
+        const q = query(
+          collection(db, 'memberships'),
+          where('orgId', '==', currentOrg.id),
+          where('email', '==', staffMember.email)
+        );
+        const snapshot = await getDocs(q);
+        const updatePromises = snapshot.docs.map(doc => 
+          updateDocument('memberships', doc.id, { role: newRole })
+        );
+        await Promise.all(updatePromises);
+        
+        showNotification('Role updated successfully');
+      } else {
+        showNotification('Failed to update role', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating role:', error);
       showNotification('Failed to update role', 'error');
     }
   };
@@ -1690,6 +1796,16 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
         return data.imageUrl ? deleteFile(data.imageUrl) : Promise.resolve(true);
       });
       await Promise.all(damageDeletions);
+
+      // 4. Delete all memberships
+      const memSnapshot = await getDocs(query(collection(db, 'memberships'), where('orgId', '==', orgId)));
+      const memDeletions = memSnapshot.docs.map(doc => removeDocument('memberships', doc.id));
+      await Promise.all(memDeletions);
+
+      // 5. Delete all staff records
+      const staffSnapshot = await getDocs(collection(db, `organizations/${orgId}/staff`));
+      const staffDeletions = staffSnapshot.docs.map(doc => removeDocument(`organizations/${orgId}/staff`, doc.id));
+      await Promise.all(staffDeletions);
 
       const success = await removeDocument('organizations', orgId);
       if (success) {
@@ -1894,7 +2010,7 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
                             onChange={(e) => handleUpdateRole(member.id, e.target.value as any)}
                             className="bg-zinc-800 border border-zinc-700 text-xs font-bold text-zinc-200 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-indigo-500"
                           >
-                            <option value="admin">Admin</option>
+                            <option value="director">Director</option>
                             <option value="manager">Manager</option>
                             <option value="cashier">Cashier</option>
                           </select>
@@ -2067,6 +2183,30 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
                   </button>
                 </div>
               </div>
+
+              <div className="pt-8 border-t border-rose-900/20 space-y-6">
+                <div>
+                  <h4 className="text-rose-500 font-bold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" /> Danger Zone
+                  </h4>
+                  <p className="text-zinc-500 text-xs mt-1">Actions here are irreversible. Use with caution.</p>
+                </div>
+                
+                <div className="bg-rose-500/5 border border-rose-500/10 p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h5 className="font-bold text-zinc-100">Bulk Cleanup</h5>
+                    <p className="text-xs text-zinc-500">Delete all organizations except your most recent one.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowCleanupConfirm(true)}
+                    disabled={isCleaningUp || organizations.filter(o => o.ownerUid === user?.uid).length <= 1}
+                    className="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-rose-900/20 flex items-center gap-2"
+                  >
+                    {isCleaningUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                    Cleanup Organizations
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -2104,7 +2244,7 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
                   <label className="text-xs font-bold text-zinc-500 uppercase">Role & Permissions</label>
                   <div className="grid grid-cols-1 gap-3">
                     {[
-                      { id: 'admin', label: 'Admin', desc: 'Full access to all features and settings' },
+                      { id: 'director', label: 'Director', desc: 'Full ownership level access and oversight' },
                       { id: 'manager', label: 'Manager', desc: 'Manage inventory and view reports' },
                       { id: 'cashier', label: 'Cashier', desc: 'POS access and basic inventory view' }
                     ].map((role) => (
@@ -2155,6 +2295,17 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
             onConfirm={() => handleDeleteOrg(deletingOrgId)}
             onCancel={() => setDeletingOrgId(null)}
             confirmText="Delete Profile"
+            isDestructive={true}
+          />
+        )}
+        {showCleanupConfirm && (
+          <ConfirmModal
+            title="Bulk Cleanup"
+            message={`This will permanently delete all your organizations and their associated data (inventory, sales, staff), keeping only your most recent one. This action cannot be undone.`}
+            onConfirm={handleBulkCleanup}
+            onCancel={() => setShowCleanupConfirm(false)}
+            confirmText="Delete All Others"
+            isDestructive={true}
           />
         )}
       </AnimatePresence>
@@ -2169,6 +2320,7 @@ function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { s
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [damages, setDamages] = useState<DamageRecord[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [chartPeriod, setChartPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month');
 
   useEffect(() => {
@@ -2188,7 +2340,12 @@ function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { s
       [],
       setDamages
     );
-    return () => { unsubInv(); unsubTx(); unsubDamages(); };
+    const unsubCustomers = subscribeToCollection<Customer>(
+      `organizations/${currentOrg.id}/customers`,
+      [],
+      setCustomers
+    );
+    return () => { unsubInv(); unsubTx(); unsubDamages(); unsubCustomers(); };
   }, [currentOrg]);
 
   const pnlData = useMemo(() => {
@@ -2236,9 +2393,10 @@ function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { s
     const totalExpenses = pnlData.totalOperatingExpenses;
     const stockValue = inventory.reduce((acc, item) => acc + (item.quantity * item.cost), 0);
     const profit = pnlData.netIncome;
+    const totalDebt = customers.reduce((acc, c) => acc + (c.totalDebt || 0), 0);
 
-    return { totalSales, totalExpenses, stockValue, profit };
-  }, [inventory, pnlData]);
+    return { totalSales, totalExpenses, stockValue, profit, totalDebt };
+  }, [inventory, pnlData, customers]);
 
   const chartData = useMemo(() => {
     const now = new Date();
@@ -2414,7 +2572,7 @@ function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { s
     <div className="space-y-8">
       {isManager ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <StatCard 
               title="Total Sales" 
               value={formatCurrency(stats.totalSales, currentOrg?.currency)} 
@@ -2445,6 +2603,13 @@ function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { s
               color="bg-emerald-600" 
               trend={8} 
               onClick={() => setActiveTab('profit-analytics')}
+            />
+            <StatCard 
+              title="Total Debtors" 
+              value={formatCurrency(stats.totalDebt, currentOrg?.currency)} 
+              icon={Users} 
+              color="bg-rose-500" 
+              onClick={() => setActiveTab('customers')}
             />
           </div>
 
@@ -4006,6 +4171,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [patientName, setPatientName] = useState('');
   const [prescriptionNumber, setPrescriptionNumber] = useState('');
   const [doctorName, setDoctorName] = useState('');
@@ -4132,7 +4298,8 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         updatedAt: now,
         paymentMethod: paymentMethod,
         phoneNumber: paymentMethod === 'MTN Mobile Money' ? phoneNumber : null,
-        customerId: selectedCustomer?.id || null
+        customerId: selectedCustomer?.id || null,
+        dueDate: paymentMethod === 'Credit' ? dueDate : null
       });
 
       if (!txId) throw new Error('Failed to create transaction');
@@ -4159,7 +4326,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
       );
 
       // 2. Create Receipt
-      const receiptData = {
+      const receiptData: any = {
         transactionId: txId,
         items: cart.map(i => ({
           name: i.item.name,
@@ -4173,16 +4340,26 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         amountPaid: effectivePaid,
         balance: paymentMethod === 'Credit' ? 0 : balance,
         amountOwing: paymentMethod === 'Credit' ? total : 0,
-        customerTotalDebt: paymentMethod === 'Credit' ? updatedTotalDebt : undefined,
         paymentMethod: paymentMethod,
-        patientName: patientName || null,
-        prescriptionNumber: prescriptionNumber || null,
-        doctorName: doctorName || null,
         date: now,
         cashierName: user?.displayName || user?.email || 'Staff',
         createdAt: now,
         updatedAt: now
       };
+
+      if (paymentMethod === 'Credit') {
+        receiptData.customerTotalDebt = updatedTotalDebt;
+        if (dueDate) receiptData.dueDate = dueDate;
+      }
+
+      if (selectedCustomer) {
+        receiptData.customerId = selectedCustomer.id;
+        receiptData.customerName = selectedCustomer.name;
+      }
+
+      if (patientName) receiptData.patientName = patientName;
+      if (prescriptionNumber) receiptData.prescriptionNumber = prescriptionNumber;
+      if (doctorName) receiptData.doctorName = doctorName;
 
       const receiptId = await createDocument(`organizations/${currentOrg.id}/receipts`, receiptData);
       
@@ -4197,19 +4374,22 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
 
       // 3. Update inventory
       for (const cartItem of cart) {
-        await updateDocument(
-          `organizations/${currentOrg.id}/inventory`,
-          cartItem.item.id,
-          { 
-            quantity: cartItem.item.quantity - cartItem.quantity,
+        const inventoryRef = doc(db, `organizations/${currentOrg.id}/inventory`, cartItem.item.id);
+        try {
+          await updateDoc(inventoryRef, {
+            quantity: increment(-cartItem.quantity),
             updatedAt: now
-          }
-        );
+          });
+        } catch (error) {
+          console.error(`Failed to update inventory for item ${cartItem.item.id}:`, error);
+          // We continue with other items even if one fails, to ensure as much stock as possible is updated
+        }
       }
 
       setCart([]);
       setAmountPaid('');
       setPhoneNumber('');
+      setDueDate('');
       setPatientName('');
       setPrescriptionNumber('');
       setDoctorName('');
@@ -4480,6 +4660,18 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
                 </div>
               )}
 
+              {paymentMethod === 'Credit' && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Payment Due Date</label>
+                  <input 
+                    type="date" 
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 text-sm text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+              )}
+
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold text-zinc-500 uppercase">
                   {paymentMethod === 'MTN Mobile Money' ? 'Amount to Charge' : paymentMethod === 'Credit' ? 'Credit Amount' : 'Amount Paid'}
@@ -4586,7 +4778,9 @@ function Customers({ showNotification, createNotification, permissions }: { show
   const [payments, setPayments] = useState<DebtPayment[]>([]);
   const [isPaying, setIsPaying] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'momo' | 'card'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'MTN Mobile Money'>('Cash');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentNotes, setPaymentNotes] = useState('');
 
   useEffect(() => {
@@ -4649,40 +4843,81 @@ function Customers({ showNotification, createNotification, permissions }: { show
       return;
     }
 
-    const now = new Date().toISOString();
-    const paymentData = {
-      customerId: selectedCustomer.id,
-      amount,
-      method: paymentMethod,
-      timestamp: now,
-      notes: paymentNotes
-    };
+    setIsProcessingPayment(true);
+    try {
+      if (paymentMethod === 'MTN Mobile Money') {
+        if (!phoneNumber) {
+          showNotification('Please enter an MTN phone number.', 'error');
+          setIsProcessingPayment(false);
+          return;
+        }
 
-    const paymentId = await createDocument(`organizations/${currentOrg.id}/customers/${selectedCustomer.id}/payments`, paymentData);
-    if (paymentId) {
-      const newDebt = selectedCustomer.totalDebt - amount;
-      await updateDocument(`organizations/${currentOrg.id}/customers`, selectedCustomer.id, {
-        totalDebt: newDebt,
-        updatedAt: now
-      });
+        showNotification('Initiating MTN Mobile Money payment...', 'success');
+        const referenceId = await mtnMoMoService.requestToPay(
+          amount,
+          currentOrg.currency || 'UGX',
+          phoneNumber,
+          `DEBT-${Date.now()}`
+        );
 
-      // Also record as income transaction
-      await createDocument(`organizations/${currentOrg.id}/transactions`, {
-        type: 'income',
+        // Polling for status
+        let status: 'SUCCESSFUL' | 'FAILED' | 'PENDING' = 'PENDING';
+        let attempts = 0;
+        const maxAttempts = 12; // 1 minute (5s * 12)
+
+        while (status === 'PENDING' && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          status = await mtnMoMoService.getTransactionStatus(referenceId);
+          attempts++;
+        }
+
+        if (status !== 'SUCCESSFUL') {
+          throw new Error(`MTN Payment ${status === 'PENDING' ? 'timed out' : 'failed'}.`);
+        }
+      }
+
+      const now = new Date().toISOString();
+      const paymentData = {
+        customerId: selectedCustomer.id,
         amount,
-        category: 'Debt Payment',
-        description: `Debt payment from ${selectedCustomer.name}`,
-        date: now,
-        paymentMethod: paymentMethod,
-        createdAt: now,
-        updatedAt: now
-      });
+        method: paymentMethod,
+        timestamp: now,
+        notes: paymentNotes
+      };
 
-      showNotification('Payment recorded successfully');
-      setIsPaying(false);
-      setPaymentAmount('');
-      setPaymentNotes('');
-      setSelectedCustomer({ ...selectedCustomer, totalDebt: newDebt });
+      const paymentId = await createDocument(`organizations/${currentOrg.id}/customers/${selectedCustomer.id}/payments`, paymentData);
+      if (paymentId) {
+        const newDebt = selectedCustomer.totalDebt - amount;
+        await updateDocument(`organizations/${currentOrg.id}/customers`, selectedCustomer.id, {
+          totalDebt: newDebt,
+          updatedAt: now
+        });
+
+        // Also record as income transaction (recorded as a sale)
+        await createDocument(`organizations/${currentOrg.id}/transactions`, {
+          type: 'income',
+          amount,
+          category: 'Sales',
+          description: `Debt payment from ${selectedCustomer.name}`,
+          date: now,
+          paymentMethod: paymentMethod,
+          phoneNumber: paymentMethod === 'MTN Mobile Money' ? phoneNumber : null,
+          createdAt: now,
+          updatedAt: now
+        });
+
+        showNotification('Payment recorded successfully');
+        setIsPaying(false);
+        setPaymentAmount('');
+        setPaymentNotes('');
+        setPhoneNumber('');
+        setSelectedCustomer({ ...selectedCustomer, totalDebt: newDebt });
+      }
+    } catch (error: any) {
+      console.error('Payment failed:', error);
+      showNotification(error.message || 'Payment failed to process', 'error');
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -5060,12 +5295,12 @@ function Customers({ showNotification, createNotification, permissions }: { show
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Payment Method</label>
                   <div className="grid grid-cols-3 gap-2">
-                    {(['cash', 'momo', 'card'] as const).map((method) => (
+                    {(['Cash', 'Card', 'MTN Mobile Money'] as const).map((method) => (
                       <button
                         key={method}
                         onClick={() => setPaymentMethod(method)}
                         className={cn(
-                          "py-3 rounded-xl text-xs font-bold transition-all border uppercase tracking-widest",
+                          "py-3 rounded-xl text-[10px] font-bold transition-all border uppercase tracking-widest",
                           paymentMethod === method 
                             ? "bg-emerald-600 border-emerald-500 text-white" 
                             : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600"
@@ -5076,6 +5311,19 @@ function Customers({ showNotification, createNotification, permissions }: { show
                     ))}
                   </div>
                 </div>
+
+                {paymentMethod === 'MTN Mobile Money' && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">MTN Phone Number</label>
+                    <input 
+                      type="tel" 
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      placeholder="e.g. 077XXXXXXX"
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Notes</label>
@@ -5090,9 +5338,17 @@ function Customers({ showNotification, createNotification, permissions }: { show
 
                 <button 
                   onClick={handleMakePayment}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-emerald-900/20"
+                  disabled={isProcessingPayment}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Confirm Payment
+                  {isProcessingPayment ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Confirm Payment'
+                  )}
                 </button>
               </div>
             </motion.div>
@@ -6913,7 +7169,8 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
             </div>
             <div>
               <h2 className="text-2xl font-black text-zinc-100 tracking-tighter uppercase italic">Welcome to JENA POS</h2>
-              <p className="text-sm text-zinc-500">Please review and accept our terms to continue</p>
+              <p className="text-sm text-zinc-500">Logged in as <span className="text-indigo-400 font-medium">{userProfile?.email}</span></p>
+              <p className="text-xs text-zinc-600 mt-1">Please review and accept our terms to continue</p>
             </div>
           </div>
           <div className="mt-6 p-4 bg-indigo-600/5 border border-indigo-600/20 rounded-2xl">
@@ -7175,7 +7432,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 
   const currentStaffMember = staff.find(s => s.uid === user?.uid || s.email === user?.email);
   const isSuperAdmin = user?.email === 'sakwamikes@gmail.com';
-  const isAdmin = currentOrg?.ownerUid === user?.uid || currentStaffMember?.role === 'admin' || isSuperAdmin;
+  const isAdmin = currentOrg?.ownerUid === user?.uid || currentStaffMember?.role === 'director' || isSuperAdmin;
   const isManager = isAdmin || currentStaffMember?.role === 'manager';
   const isCashier = isManager || currentStaffMember?.role === 'cashier';
 
@@ -7669,7 +7926,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
           uid: user.uid,
           email: user.email,
           displayName: userProfile?.displayName || user.displayName || 'Owner',
-          role: 'admin',
+          role: 'director',
           createdAt: new Date().toISOString()
         });
       }
@@ -7806,7 +8063,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             <Building2 className="w-10 h-10 text-indigo-500" />
           </div>
           <h2 className="text-3xl font-bold text-zinc-100">Welcome to JENA POS</h2>
-          <p className="text-zinc-400">Logged in as <span className="text-indigo-400 font-medium">{user?.email}</span></p>
+          <p className="text-zinc-400">Logged in as <span className="text-indigo-400 font-medium">{user?.email || userProfile?.email}</span></p>
           <p className="text-zinc-400">To get started, create your first business organization profile or find an existing one.</p>
           <div className="space-y-3">
             <button 
@@ -7992,6 +8249,14 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
           </nav>
 
           <div className="pt-4 border-t border-zinc-800 space-y-2">
+            {isSidebarOpen && (
+              <div className="px-4 py-2 mb-2">
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Logged in as</p>
+                <p className="text-xs font-medium text-indigo-400 truncate" title={user?.email || ''}>
+                  {user?.email}
+                </p>
+              </div>
+            )}
             <button 
               onClick={handleSignOut}
               className="flex items-center gap-3 w-full px-4 py-3 text-zinc-500 hover:text-rose-500 transition-colors"
@@ -8178,6 +8443,28 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               <CreditCard className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
               <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider">{planCountdown}</span>
             </button>
+            <div className="relative group">
+              <button 
+                onClick={() => { setActiveTab('settings'); setSettingsTab('profile'); }}
+                className={cn(
+                  "w-8 h-8 rounded-full border flex items-center justify-center transition-all overflow-hidden",
+                  theme === 'dark' 
+                    ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-indigo-500 hover:border-indigo-500/50" 
+                    : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-indigo-400"
+                )}
+              >
+                {user?.photoURL ? (
+                  <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <User className="w-4 h-4" />
+                )}
+              </button>
+              <div className="absolute top-full mt-2 right-0 w-48 bg-zinc-900 border border-zinc-800 p-3 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                <p className="text-xs font-bold text-zinc-100 truncate">{userProfile?.displayName || 'My Account'}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 truncate">{user?.email}</p>
+              </div>
+            </div>
+
             <div className="relative">
               <button 
                 onClick={() => { setActiveTab('help'); setShowHelpReminder(false); }}
@@ -9168,8 +9455,18 @@ function AppContent() {
   if (user) {
     if (!userProfile) {
       return (
-        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-6">
           <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+          <div className="text-center space-y-2">
+            <p className="text-zinc-400 text-sm">Loading your profile...</p>
+            <p className="text-zinc-600 text-[10px] uppercase tracking-widest">{user.email}</p>
+          </div>
+          <button 
+            onClick={() => auth.signOut()}
+            className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-4"
+          >
+            Sign out and try again
+          </button>
         </div>
       );
     }

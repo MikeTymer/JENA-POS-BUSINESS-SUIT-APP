@@ -141,9 +141,28 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     // 2. Subscribe to memberships to get staff organizations
     const membershipsQuery = query(collection(db, 'memberships'), where('userId', '==', user.uid));
-    const unsubMemberships = onSnapshot(membershipsQuery, (snapshot) => {
+    const unsubMemberships = onSnapshot(membershipsQuery, async (snapshot) => {
       const ids = snapshot.docs.map(doc => doc.data().orgId as string);
       setStaffOrgIds(ids);
+      
+      // Ensure staff record exists for each membership
+      for (const d of snapshot.docs) {
+        const data = d.data();
+        const staffDocRef = doc(db, `organizations/${data.orgId}/staff`, user.uid);
+        const staffSnap = await getDoc(staffDocRef);
+        
+        if (!staffSnap.exists()) {
+          console.log(`Creating missing staff record for org ${data.orgId}`);
+          await setDocument(`organizations/${data.orgId}/staff`, user.uid, {
+            id: user.uid,
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            role: data.role,
+            addedAt: new Date().toISOString()
+          });
+        }
+      }
     });
 
     // 3. Check for unclaimed memberships
@@ -151,15 +170,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const unsubUnclaimed = onSnapshot(unclaimedQuery, async (snapshot) => {
       for (const d of snapshot.docs) {
         const data = d.data();
+        console.log(`Claiming membership for org ${data.orgId}`);
         await updateDocument('memberships', d.id, { userId: user.uid });
-        await setDocument(`organizations/${data.orgId}/staff`, user.uid, {
-          id: user.uid,
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          role: data.role,
-          addedAt: new Date().toISOString()
-        });
+        // The membershipsQuery listener above will handle creating the staff record
       }
     });
 
