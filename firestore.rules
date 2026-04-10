@@ -341,8 +341,8 @@ service cloud.firestore {
       match /customers/{customerId} {
         allow read: if isStaff(orgId);
         allow create: if isStaff(orgId) && isValidCustomer(request.resource.data);
-        allow update: if isStaff(orgId) && isValidCustomer(request.resource.data) && 
-                        request.resource.data.createdAt == resource.data.createdAt;
+        allow update: if isStaff(orgId) && 
+                        (!('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt);
         allow delete: if isOrgOwner(orgId);
 
         match /payments/{paymentId} {

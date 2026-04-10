@@ -90,7 +90,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { auth, db, storage } from './firebase';
+import { auth, db, storage, handleFirestoreError, OperationType } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { FirebaseProvider, useFirebase, Organization, UserProfile } from './components/FirebaseProvider';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -4310,10 +4310,15 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         const debtAmount = total; // Full amount added to debt
         updatedTotalDebt = (selectedCustomer.totalDebt || 0) + debtAmount;
         if (debtAmount > 0) {
-          await updateDocument(`organizations/${currentOrg.id}/customers`, selectedCustomer.id, {
-            totalDebt: updatedTotalDebt,
+        const customerRef = doc(db, `organizations/${currentOrg.id}/customers`, selectedCustomer.id);
+        try {
+          await updateDoc(customerRef, {
+            totalDebt: increment(debtAmount),
             updatedAt: now
           });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `organizations/${currentOrg.id}/customers/${selectedCustomer.id}`);
+        }
         }
       }
 
@@ -4381,8 +4386,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
             updatedAt: now
           });
         } catch (error) {
-          console.error(`Failed to update inventory for item ${cartItem.item.id}:`, error);
-          // We continue with other items even if one fails, to ensure as much stock as possible is updated
+          handleFirestoreError(error, OperationType.UPDATE, `organizations/${currentOrg.id}/inventory/${cartItem.item.id}`);
         }
       }
 
@@ -4887,11 +4891,15 @@ function Customers({ showNotification, createNotification, permissions }: { show
 
       const paymentId = await createDocument(`organizations/${currentOrg.id}/customers/${selectedCustomer.id}/payments`, paymentData);
       if (paymentId) {
-        const newDebt = selectedCustomer.totalDebt - amount;
-        await updateDocument(`organizations/${currentOrg.id}/customers`, selectedCustomer.id, {
-          totalDebt: newDebt,
-          updatedAt: now
-        });
+        const customerRef = doc(db, `organizations/${currentOrg.id}/customers`, selectedCustomer.id);
+        try {
+          await updateDoc(customerRef, {
+            totalDebt: increment(-amount),
+            updatedAt: now
+          });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `organizations/${currentOrg.id}/customers/${selectedCustomer.id}`);
+        }
 
         // Also record as income transaction (recorded as a sale)
         await createDocument(`organizations/${currentOrg.id}/transactions`, {
@@ -4911,7 +4919,7 @@ function Customers({ showNotification, createNotification, permissions }: { show
         setPaymentAmount('');
         setPaymentNotes('');
         setPhoneNumber('');
-        setSelectedCustomer({ ...selectedCustomer, totalDebt: newDebt });
+        setSelectedCustomer({ ...selectedCustomer, totalDebt: selectedCustomer.totalDebt - amount });
       }
     } catch (error: any) {
       console.error('Payment failed:', error);
