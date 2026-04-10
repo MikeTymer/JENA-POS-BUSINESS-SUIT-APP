@@ -29,6 +29,7 @@ export interface Organization {
   isPaid?: boolean;
   trialExpiresAt?: string;
   referredBy?: string;
+  businessType?: 'general' | 'medical';
   createdAt: any;
   expiresAt?: string;
 }

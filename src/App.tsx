@@ -68,7 +68,10 @@ import {
   Share2,
   Copy,
   Phone,
-  ExternalLink
+  ExternalLink,
+  UserPlus,
+  Mail,
+  Link as LinkIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -115,6 +118,11 @@ interface InventoryItem {
   price: number;
   cost: number;
   category: string;
+  dosageForm?: string;
+  strength?: string;
+  expiryDate?: string;
+  batchNumber?: string;
+  manufacturer?: string;
   imageUrl?: string;
   createdAt: string;
   updatedAt: string;
@@ -166,6 +174,26 @@ interface StaffMember {
   addedAt: string;
 }
 
+interface Customer {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  totalDebt: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface DebtPayment {
+  id: string;
+  customerId: string;
+  amount: number;
+  method: string;
+  timestamp: string;
+  notes?: string;
+}
+
 interface ReceiptData {
   id: string;
   transactionId: string;
@@ -180,7 +208,12 @@ interface ReceiptData {
   total: number;
   amountPaid?: number;
   balance?: number;
+  amountOwing?: number;
+  customerTotalDebt?: number;
   paymentMethod: string;
+  patientName?: string;
+  prescriptionNumber?: string;
+  doctorName?: string;
   date: string;
   cashierName: string;
   createdAt: string;
@@ -268,6 +301,7 @@ const getBase64FromUrl = async (url: string): Promise<string> => {
 
 const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () => void }) => {
   const { currentOrg } = useFirebase();
+  const isMedical = currentOrg?.businessType === 'medical';
   const handlePrint = () => {
     window.print();
   };
@@ -361,7 +395,9 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
 
     if (receipt.amountPaid !== undefined) {
       y += 2;
-      drawTotalLine('Amount Paid', formatCurrency(receipt.amountPaid, currentOrg?.currency));
+      const label = receipt.paymentMethod === 'Credit' ? 'Credit Amount' : 'Amount Paid';
+      const value = receipt.paymentMethod === 'Credit' ? receipt.total : receipt.amountPaid;
+      drawTotalLine(label, formatCurrency(value, currentOrg?.currency));
     }
     if (receipt.balance !== undefined) {
       drawTotalLine('Balance (Change)', formatCurrency(receipt.balance, currentOrg?.currency), true);
@@ -382,7 +418,7 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white text-zinc-950 p-8 rounded-3xl max-w-md w-full space-y-6 shadow-2xl print:p-8 print:shadow-none print:rounded-none"
+        className="bg-white text-black p-8 rounded-3xl max-w-md w-full space-y-6 shadow-2xl print:p-8 print:shadow-none print:rounded-none"
       >
         <div className="text-center space-y-2">
           {currentOrg?.logoUrl && (
@@ -390,57 +426,78 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
               <img src={currentOrg.logoUrl} alt="Logo" className="h-16 w-auto object-contain" referrerPolicy="no-referrer" />
             </div>
           )}
-          <h2 className="text-2xl font-black tracking-tighter">{currentOrg?.name || 'JENA POS'}</h2>
+          <h2 className="text-2xl font-black tracking-tighter text-black">{currentOrg?.name || 'JENA POS'}</h2>
           {currentOrg?.address && (
-            <p className="text-xs text-zinc-500">{currentOrg.address}</p>
+            <p className="text-xs text-slate-700 font-medium">{currentOrg.address}</p>
           )}
           {currentOrg?.uprsRegistrationNumber && (
-            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
+            <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-widest">
               UPRS REG: {currentOrg.uprsRegistrationNumber}
             </p>
           )}
-          <p className="text-sm text-zinc-500">Official Sale Receipt</p>
-          <div className="text-[10px] text-zinc-400 font-mono uppercase">
+          <p className="text-sm text-slate-800 font-bold">Official Sale Receipt</p>
+          <div className="text-[10px] text-slate-600 font-mono uppercase font-bold">
             ID: {receipt.id}<br/>
             Date: {formatDate(receipt.date)}
           </div>
+          {isMedical && (receipt.patientName || receipt.prescriptionNumber || receipt.doctorName) && (
+            <div className="pt-2 space-y-1 text-left border-t border-slate-200 mt-2">
+              {receipt.patientName && <p className="text-xs font-bold text-black">Patient: <span className="font-normal">{receipt.patientName}</span></p>}
+              {receipt.prescriptionNumber && <p className="text-xs font-bold text-black">Prescription: <span className="font-normal">{receipt.prescriptionNumber}</span></p>}
+              {receipt.doctorName && <p className="text-xs font-bold text-black">Doctor: <span className="font-normal">{receipt.doctorName}</span></p>}
+            </div>
+          )}
         </div>
 
-        <div className="border-y border-dashed border-zinc-200 py-4 space-y-3">
+        <div className="border-y border-dashed border-slate-300 py-4 space-y-3">
           {receipt.items.map((item, i) => (
             <div key={i} className="flex justify-between text-sm">
               <div className="flex-1">
-                <p className="font-bold">{item.name}</p>
-                <p className="text-xs text-zinc-500">{item.quantity} x {formatCurrency(item.price, currentOrg?.currency)}</p>
+                <p className="font-bold text-black">{item.name}</p>
+                <p className="text-xs text-slate-700 font-medium">{item.quantity} x {formatCurrency(item.price, currentOrg?.currency)}</p>
               </div>
-              <p className="font-bold">{formatCurrency(item.total, currentOrg?.currency)}</p>
+              <p className="font-bold text-black">{formatCurrency(item.total, currentOrg?.currency)}</p>
             </div>
           ))}
         </div>
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-zinc-500">Subtotal</span>
-            <span>{formatCurrency(receipt.subtotal, currentOrg?.currency)}</span>
+            <span className="text-slate-700 font-medium">Subtotal</span>
+            <span className="text-black font-bold">{formatCurrency(receipt.subtotal, currentOrg?.currency)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-zinc-500">Tax (0%)</span>
-            <span>{formatCurrency(receipt.tax, currentOrg?.currency)}</span>
+            <span className="text-slate-700 font-medium">Tax (0%)</span>
+            <span className="text-black font-bold">{formatCurrency(receipt.tax, currentOrg?.currency)}</span>
           </div>
-          <div className="flex justify-between text-xl font-black pt-2 border-t border-zinc-100">
+          <div className="flex justify-between text-xl font-black pt-2 border-t border-slate-200 text-black">
             <span>Total</span>
             <span>{formatCurrency(receipt.total, currentOrg?.currency)}</span>
           </div>
           {receipt.amountPaid !== undefined && (
-            <div className="flex justify-between text-sm text-zinc-500 pt-1">
-              <span>Amount Paid</span>
-              <span>{formatCurrency(receipt.amountPaid, currentOrg?.currency)}</span>
+            <div className="flex justify-between text-sm text-slate-700 pt-1 font-medium">
+              <span>{receipt.paymentMethod === 'Credit' ? 'Credit Amount' : 'Amount Paid'}</span>
+              <span className="text-black font-bold">
+                {formatCurrency(receipt.paymentMethod === 'Credit' ? receipt.total : receipt.amountPaid, currentOrg?.currency)}
+              </span>
             </div>
           )}
-          {receipt.balance !== undefined && (
-            <div className="flex justify-between text-sm font-bold text-indigo-600 pt-1">
+          {receipt.amountOwing !== undefined && receipt.amountOwing > 0 && (
+            <div className="flex justify-between text-sm font-bold text-rose-600 pt-1">
+              <span>Amount Owing</span>
+              <span>{formatCurrency(receipt.amountOwing, currentOrg?.currency)}</span>
+            </div>
+          )}
+          {receipt.balance !== undefined && receipt.balance > 0 && (
+            <div className="flex justify-between text-sm font-bold text-indigo-700 pt-1">
               <span>Balance (Change)</span>
               <span>{formatCurrency(receipt.balance, currentOrg?.currency)}</span>
+            </div>
+          )}
+          {receipt.customerTotalDebt !== undefined && receipt.paymentMethod === 'Credit' && (
+            <div className="flex justify-between text-sm font-bold text-black pt-2 border-t border-slate-100 mt-2">
+              <span>Total Outstanding Debt</span>
+              <span>{formatCurrency(receipt.customerTotalDebt, currentOrg?.currency)}</span>
             </div>
           )}
         </div>
@@ -449,7 +506,7 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
           <div className="grid grid-cols-2 gap-3">
             <button 
               onClick={handlePrint}
-              className="bg-zinc-900 text-white font-bold py-3 rounded-xl hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
+              className="bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition-colors flex items-center justify-center gap-2"
             >
               <Printer className="w-4 h-4" /> Print
             </button>
@@ -2507,11 +2564,25 @@ function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { s
 
 function Inventory({ showNotification, createNotification, permissions, highlightedItemId, setHighlightedItemId }: { showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, permissions: any, highlightedItemId: string | null, setHighlightedItemId: (id: string | null) => void }) {
   const { currentOrg, user, userProfile } = useFirebase();
+  const isMedical = currentOrg?.businessType === 'medical';
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [newItem, setNewItem] = useState({ name: '', sku: '', quantity: 0, price: 0, cost: 0, category: '', imageUrl: '' });
+  const [newItem, setNewItem] = useState({ 
+    name: '', 
+    sku: '', 
+    quantity: 0, 
+    price: 0, 
+    cost: 0, 
+    category: '', 
+    dosageForm: '',
+    strength: '',
+    expiryDate: '',
+    batchNumber: '',
+    manufacturer: '',
+    imageUrl: '' 
+  });
   const [lastDeleted, setLastDeleted] = useState<InventoryItem | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -2643,7 +2714,20 @@ function Inventory({ showNotification, createNotification, permissions, highligh
       });
       if (id) {
         setIsAdding(false);
-        setNewItem({ name: '', sku: '', quantity: 0, price: 0, cost: 0, category: '', imageUrl: '' });
+        setNewItem({ 
+          name: '', 
+          sku: '', 
+          quantity: 0, 
+          price: 0, 
+          cost: 0, 
+          category: '', 
+          dosageForm: '',
+          strength: '',
+          expiryDate: '',
+          batchNumber: '',
+          manufacturer: '',
+          imageUrl: '' 
+        });
         showNotification('Product saved successfully!');
         
         await createNotification(
@@ -2760,19 +2844,50 @@ function Inventory({ showNotification, createNotification, permissions, highligh
   };
 
   const exportToExcel = () => {
-    const data = filteredItems.map(item => ({
-      Name: item.name,
-      SKU: item.sku,
-      Category: item.category,
-      Quantity: item.quantity,
-      Price: item.price,
-      Cost: item.cost
-    }));
+    const isMedical = currentOrg?.businessType === 'medical';
+    
+    let dataToExport = filteredItems.map(item => {
+      return {
+        Name: item.name,
+        SKU: item.sku,
+        Category: item.category,
+        ...(isMedical && {
+          DosageForm: item.dosageForm || '',
+          Strength: item.strength || '',
+        }),
+        BatchNumber: item.batchNumber || '',
+        ExpiryDate: item.expiryDate || '',
+        Manufacturer: item.manufacturer || '',
+        Quantity: item.quantity,
+        Price: item.price,
+        Cost: item.cost
+      };
+    });
 
-    const ws = XLSX.utils.json_to_sheet(data);
+    if (dataToExport.length === 0) {
+      // Provide a template row if empty to ensure headers are present
+      const templateRow = {
+        Name: isMedical ? 'Sample Medicine' : 'Sample Product',
+        SKU: isMedical ? 'MED001' : 'PROD001',
+        Category: isMedical ? 'Antibiotics' : 'General',
+        ...(isMedical && {
+          DosageForm: 'Tablet',
+          Strength: '500mg',
+        }),
+        BatchNumber: 'BATCH123',
+        ExpiryDate: '2025-12-31',
+        Manufacturer: 'Sample Corp',
+        Quantity: 100,
+        Price: 10,
+        Cost: 5
+      };
+      dataToExport = [templateRow];
+    }
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventory");
-    XLSX.writeFile(wb, `inventory-template-${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `inventory-template-${isMedical ? 'medical' : 'general'}-${new Date().toISOString().split('T')[0]}.xlsx`);
     showNotification('Template downloaded successfully!');
   };
 
@@ -2802,13 +2917,19 @@ function Inventory({ showNotification, createNotification, permissions, highligh
           const name = row.Name || row.name || '';
           const sku = row.SKU || row.sku || '';
           const category = row.Category || row.category || '';
+          const dosageForm = row.DosageForm || row.dosageForm || '';
+          const strength = row.Strength || row.strength || '';
+          const batchNumber = row.BatchNumber || row.batchNumber || '';
+          const expiryDate = row.ExpiryDate || row.expiryDate || '';
+          const manufacturer = row.Manufacturer || row.manufacturer || '';
           const quantity = Number(row.Quantity || row.quantity || 0);
           const price = Number(row.Price || row.price || 0);
           const cost = Number(row.Cost || row.cost || 0);
 
           if (name) {
             await createDocument(`organizations/${currentOrg.id}/inventory`, {
-              name, sku, category, quantity, price, cost,
+              name, sku, category, dosageForm, strength, batchNumber, expiryDate, manufacturer,
+              quantity, price, cost,
               createdAt: now,
               updatedAt: now
             });
@@ -2990,22 +3111,25 @@ function Inventory({ showNotification, createNotification, permissions, highligh
         )}
       </AnimatePresence>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-x-auto custom-scrollbar">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-x-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse min-w-[1000px]">
           <thead>
             <tr className="bg-zinc-800/50 border-b border-zinc-800">
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Product</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">SKU</th>
+              <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Batch/Expiry</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Status</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Stock</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Price</th>
-              <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Cost</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {filteredItems.map((item) => {
               const status = getStatus(item.quantity);
+              const isExpired = item.expiryDate && new Date(item.expiryDate) < new Date();
+              const isNearExpiry = item.expiryDate && !isExpired && new Date(item.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days (1 month)
+
               return (
                 <tr 
                   key={item.id} 
@@ -3031,11 +3155,28 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                       </div>
                       <div>
                         <p className="text-sm font-medium text-zinc-100">{item.name}</p>
-                        <p className="text-xs text-zinc-500">{item.category}</p>
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">
+                          {isMedical && <>{item.dosageForm} {item.strength} • </>}{item.category}
+                        </p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-zinc-400">{item.sku}</td>
+                  <td className="px-6 py-4">
+                    <div className="space-y-1">
+                      <p className="text-xs text-zinc-300 font-mono">{item.batchNumber || 'N/A'}</p>
+                      {item.expiryDate && (
+                        <p className={cn(
+                          "text-[10px] font-bold uppercase",
+                          isExpired ? "text-rose-500" : isNearExpiry ? "text-amber-500" : "text-zinc-500"
+                        )}>
+                          Exp: {formatDate(item.expiryDate)}
+                          {isExpired && " (EXPIRED)"}
+                          {isNearExpiry && !isExpired && " (SOON)"}
+                        </p>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <span className={cn(
                       "px-2 py-1 rounded-full text-[10px] font-bold uppercase",
@@ -3048,7 +3189,6 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                     <span className="font-mono">{item.quantity}</span>
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-zinc-100">{formatCurrency(item.price, currentOrg?.currency)}</td>
-                  <td className="px-6 py-4 text-sm text-zinc-400">{formatCurrency(item.cost, currentOrg?.currency)}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       {permissions.canManageInventory && (
@@ -3088,24 +3228,94 @@ function Inventory({ showNotification, createNotification, permissions, highligh
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-lg w-full space-y-6 overflow-y-auto max-h-[90vh] custom-scrollbar"
+              className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-2xl w-full space-y-6 overflow-y-auto max-h-[90vh] custom-scrollbar"
             >
               <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold text-zinc-100">Add New Product</h3>
+                <h3 className="text-xl font-bold text-zinc-100">{isMedical ? 'Add New Medicine / Product' : 'Add New Product'}</h3>
                 <button onClick={() => setIsAdding(false)} className="text-zinc-500 hover:text-zinc-200"><X className="w-6 h-6" /></button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">Product Name</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">{isMedical ? 'Product/Medicine Name' : 'Product Name'}</label>
                   <input 
                     type="text" 
+                    placeholder={isMedical ? "e.g., Paracetamol" : "e.g., Laptop"}
                     value={newItem.name}
                     onChange={(e) => setNewItem({...newItem, name: e.target.value})}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
                   />
                 </div>
+                {isMedical && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-zinc-500 uppercase">Dosage Form</label>
+                      <select 
+                        value={newItem.dosageForm}
+                        onChange={(e) => setNewItem({...newItem, dosageForm: e.target.value})}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option value="">Select Form</option>
+                        <option value="Tablet">Tablet</option>
+                        <option value="Capsule">Capsule</option>
+                        <option value="Syrup">Syrup</option>
+                        <option value="Injection">Injection</option>
+                        <option value="Ointment">Ointment</option>
+                        <option value="Drops">Drops</option>
+                        <option value="Inhaler">Inhaler</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-zinc-500 uppercase">Strength</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g., 500mg, 10ml"
+                        value={newItem.strength}
+                        onChange={(e) => setNewItem({...newItem, strength: e.target.value})}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">SKU</label>
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Batch Number</label>
+                  <input 
+                    type="text" 
+                    value={newItem.batchNumber}
+                    onChange={(e) => setNewItem({...newItem, batchNumber: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Expiry Date</label>
+                  <input 
+                    type="date" 
+                    value={newItem.expiryDate}
+                    onChange={(e) => setNewItem({...newItem, expiryDate: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Manufacturer</label>
+                  <input 
+                    type="text" 
+                    value={newItem.manufacturer}
+                    onChange={(e) => setNewItem({...newItem, manufacturer: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Category</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g., Antibiotics, Painkillers"
+                    value={newItem.category}
+                    onChange={(e) => setNewItem({...newItem, category: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">SKU / Barcode</label>
                   <input 
                     type="text" 
                     value={newItem.sku}
@@ -3114,16 +3324,7 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">Category</label>
-                  <input 
-                    type="text" 
-                    value={newItem.category}
-                    onChange={(e) => setNewItem({...newItem, category: e.target.value})}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">Quantity</label>
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Quantity in Stock</label>
                   <input 
                     type="number" 
                     value={newItem.quantity}
@@ -3132,7 +3333,7 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">Price</label>
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Selling Price</label>
                   <input 
                     type="number" 
                     value={newItem.price}
@@ -3141,7 +3342,7 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">Cost</label>
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Cost Price</label>
                   <input 
                     type="number" 
                     value={newItem.cost}
@@ -3150,7 +3351,7 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                   />
                 </div>
 
-                <div className="col-span-2 space-y-2">
+                <div className="sm:col-span-2 space-y-2">
                   <label className="text-xs font-bold text-zinc-500 uppercase">Product Image</label>
                   <label className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700 rounded-2xl hover:border-indigo-500 hover:bg-indigo-500/5 transition-all cursor-pointer group">
                     {uploading ? (
@@ -3200,15 +3401,15 @@ function Inventory({ showNotification, createNotification, permissions, highligh
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-lg w-full space-y-6 overflow-y-auto max-h-[90vh] custom-scrollbar"
+              className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl max-w-2xl w-full space-y-6 overflow-y-auto max-h-[90vh] custom-scrollbar"
             >
               <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold text-zinc-100">Edit Product</h3>
+                <h3 className="text-xl font-bold text-zinc-100">{isMedical ? 'Edit Medicine / Product' : 'Edit Product'}</h3>
                 <button onClick={() => { setIsEditing(false); setEditingItem(null); }} className="text-zinc-500 hover:text-zinc-200"><X className="w-6 h-6" /></button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">Product Name</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">{isMedical ? 'Product/Medicine Name' : 'Product Name'}</label>
                   <input 
                     type="text" 
                     value={editingItem.name}
@@ -3216,12 +3417,61 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
                   />
                 </div>
+                {isMedical && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-zinc-500 uppercase">Dosage Form</label>
+                      <select 
+                        value={editingItem.dosageForm}
+                        onChange={(e) => setEditingItem({...editingItem, dosageForm: e.target.value})}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option value="">Select Form</option>
+                        <option value="Tablet">Tablet</option>
+                        <option value="Capsule">Capsule</option>
+                        <option value="Syrup">Syrup</option>
+                        <option value="Injection">Injection</option>
+                        <option value="Ointment">Ointment</option>
+                        <option value="Drops">Drops</option>
+                        <option value="Inhaler">Inhaler</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-zinc-500 uppercase">Strength</label>
+                      <input 
+                        type="text" 
+                        value={editingItem.strength}
+                        onChange={(e) => setEditingItem({...editingItem, strength: e.target.value})}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">SKU</label>
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Batch Number</label>
                   <input 
                     type="text" 
-                    value={editingItem.sku}
-                    onChange={(e) => setEditingItem({...editingItem, sku: e.target.value})}
+                    value={editingItem.batchNumber}
+                    onChange={(e) => setEditingItem({...editingItem, batchNumber: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Expiry Date</label>
+                  <input 
+                    type="date" 
+                    value={editingItem.expiryDate ? new Date(editingItem.expiryDate).toISOString().split('T')[0] : ''}
+                    onChange={(e) => setEditingItem({...editingItem, expiryDate: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Manufacturer</label>
+                  <input 
+                    type="text" 
+                    value={editingItem.manufacturer}
+                    onChange={(e) => setEditingItem({...editingItem, manufacturer: e.target.value})}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
                   />
                 </div>
@@ -3231,6 +3481,15 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                     type="text" 
                     value={editingItem.category}
                     onChange={(e) => setEditingItem({...editingItem, category: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">SKU / Barcode</label>
+                  <input 
+                    type="text" 
+                    value={editingItem.sku}
+                    onChange={(e) => setEditingItem({...editingItem, sku: e.target.value})}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
                   />
                 </div>
@@ -3262,7 +3521,7 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                   />
                 </div>
 
-                <div className="col-span-2 space-y-2">
+                <div className="sm:col-span-2 space-y-2">
                   <label className="text-xs font-bold text-zinc-500 uppercase">Product Image</label>
                   <label className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-700 rounded-2xl hover:border-indigo-500 hover:bg-indigo-500/5 transition-all cursor-pointer group">
                     {uploading ? (
@@ -3427,7 +3686,8 @@ function Transactions({ showNotification, createNotification, permissions, highl
   const filteredTransactions = transactions.filter(tx => {
     const matchesSearch = !search || 
       tx.description?.toLowerCase().includes(search.toLowerCase()) || 
-      tx.category?.toLowerCase().includes(search.toLowerCase());
+      tx.category?.toLowerCase().includes(search.toLowerCase()) ||
+      tx.amount.toString().includes(search);
     
     const matchesType = typeFilter === 'all' || tx.type === typeFilter;
     
@@ -3481,6 +3741,16 @@ function Transactions({ showNotification, createNotification, permissions, highl
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <div className="relative hidden sm:block">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <input 
+              type="text"
+              placeholder="Search description, category or amount..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all w-64"
+            />
+          </div>
           <button 
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
@@ -3508,13 +3778,13 @@ function Transactions({ showNotification, createNotification, permissions, highl
             className="overflow-hidden"
           >
             <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-2 sm:hidden">
                 <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Search</label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                   <input 
                     type="text"
-                    placeholder="Search description or category..."
+                    placeholder="Search description, category or amount..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
@@ -3724,16 +3994,21 @@ function Transactions({ showNotification, createNotification, permissions, highl
 }
 
 // --- POS View ---
-const POSView = ({ currentOrg, showNotification, createNotification, userProfile, permissions }: { currentOrg: any, showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, userProfile: any, permissions: any }) => {
+const POSView = ({ currentOrg, showNotification, createNotification, userProfile, permissions, customers }: { currentOrg: any, showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, userProfile: any, permissions: any, customers: Customer[] }) => {
   const { user } = useFirebase();
+  const isMedical = currentOrg?.businessType === 'medical';
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [cart, setCart] = useState<{item: InventoryItem, quantity: number}[]>([]);
   const [search, setSearch] = useState('');
   const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null);
   const [amountPaid, setAmountPaid] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'MTN Mobile Money'>('Cash');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'MTN Mobile Money' | 'Credit'>('Cash');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [patientName, setPatientName] = useState('');
+  const [prescriptionNumber, setPrescriptionNumber] = useState('');
+  const [doctorName, setDoctorName] = useState('');
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -3779,10 +4054,27 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
   const paid = Number(amountPaid) || 0;
   const balance = Math.max(0, paid - total);
 
+  useEffect(() => {
+    if (paymentMethod === 'Credit' || paymentMethod === 'MTN Mobile Money') {
+      setAmountPaid(total.toString());
+    }
+  }, [total, paymentMethod]);
+
   const handleCheckout = async () => {
     if (!currentOrg || cart.length === 0) return;
-    if (paid < total) {
+    
+    if (paymentMethod === 'Credit' && !selectedCustomer) {
+      showNotification('Please select a customer for credit sale.', 'error');
+      return;
+    }
+
+    if (paymentMethod !== 'Credit' && paid < total) {
       showNotification('Insufficient amount paid.', 'error');
+      return;
+    }
+
+    if (paymentMethod === 'Credit' && paid > total) {
+      showNotification('Credit payment cannot exceed the total amount.', 'error');
       return;
     }
 
@@ -3820,12 +4112,14 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
       }
 
       const now = new Date().toISOString();
+      const effectivePaid = paymentMethod === 'Credit' ? 0 : paid;
+      
       // 1. Create transaction
       const txId = await createDocument(`organizations/${currentOrg.id}/transactions`, {
         type: 'income',
-        amount: total,
+        amount: Math.min(effectivePaid, total),
         category: 'Sales',
-        description: `POS Sale: ${cart.map(i => `${i.quantity}x ${i.item.name}`).join(', ')}`,
+        description: `${paymentMethod === 'Credit' ? 'Credit Sale' : 'POS Sale'}: ${cart.map(i => `${i.quantity}x ${i.item.name}`).join(', ')}${selectedCustomer ? ` (Customer: ${selectedCustomer.name})` : ''}`,
         items: cart.map(i => ({
           id: i.item.id,
           name: i.item.name,
@@ -3837,17 +4131,31 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         createdAt: now,
         updatedAt: now,
         paymentMethod: paymentMethod,
-        phoneNumber: paymentMethod === 'MTN Mobile Money' ? phoneNumber : null
+        phoneNumber: paymentMethod === 'MTN Mobile Money' ? phoneNumber : null,
+        customerId: selectedCustomer?.id || null
       });
 
       if (!txId) throw new Error('Failed to create transaction');
 
+      // If credit sale, update customer debt
+      let updatedTotalDebt = 0;
+      if (paymentMethod === 'Credit' && selectedCustomer) {
+        const debtAmount = total; // Full amount added to debt
+        updatedTotalDebt = (selectedCustomer.totalDebt || 0) + debtAmount;
+        if (debtAmount > 0) {
+          await updateDocument(`organizations/${currentOrg.id}/customers`, selectedCustomer.id, {
+            totalDebt: updatedTotalDebt,
+            updatedAt: now
+          });
+        }
+      }
+
       // Create notification for sale
       await createNotification(
         'sale',
-        'New Sale Made',
-        `${userProfile?.displayName || 'A user'} made a sale of ${currentOrg.currency || 'UGX'} ${total.toLocaleString()}`,
-        { txId, total, itemsCount: cart.length }
+        paymentMethod === 'Credit' ? 'New Credit Sale' : 'New Sale Made',
+        `${userProfile?.displayName || 'A user'} made a sale of ${currentOrg.currency || 'UGX'} ${total.toLocaleString()}${paymentMethod === 'Credit' ? ` (Credit: ${currentOrg.currency} ${total.toLocaleString()})` : ''}`,
+        { txId, total, itemsCount: cart.length, customerId: selectedCustomer?.id }
       );
 
       // 2. Create Receipt
@@ -3862,9 +4170,14 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         subtotal: total,
         tax: 0,
         total: total,
-        amountPaid: paid,
-        balance: balance,
+        amountPaid: effectivePaid,
+        balance: paymentMethod === 'Credit' ? 0 : balance,
+        amountOwing: paymentMethod === 'Credit' ? total : 0,
+        customerTotalDebt: paymentMethod === 'Credit' ? updatedTotalDebt : undefined,
         paymentMethod: paymentMethod,
+        patientName: patientName || null,
+        prescriptionNumber: prescriptionNumber || null,
+        doctorName: doctorName || null,
         date: now,
         cashierName: user?.displayName || user?.email || 'Staff',
         createdAt: now,
@@ -3897,6 +4210,10 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
       setCart([]);
       setAmountPaid('');
       setPhoneNumber('');
+      setPatientName('');
+      setPrescriptionNumber('');
+      setDoctorName('');
+      setSelectedCustomer(null);
       showNotification('Sale processed successfully!');
     } catch (error: any) {
       console.error('Checkout failed:', error);
@@ -4014,6 +4331,60 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         </div>
 
         <div className="p-6 space-y-4">
+          {isMedical && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Patient Name</label>
+                  <input 
+                    type="text" 
+                    value={patientName}
+                    onChange={(e) => setPatientName(e.target.value)}
+                    placeholder="Optional"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Prescription #</label>
+                  <input 
+                    type="text" 
+                    value={prescriptionNumber}
+                    onChange={(e) => setPrescriptionNumber(e.target.value)}
+                    placeholder="Optional"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Doctor Name</label>
+                <input 
+                  type="text" 
+                  value={doctorName}
+                  onChange={(e) => setDoctorName(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Customer (Required for Credit)</label>
+            <select 
+              value={selectedCustomer?.id || ''}
+              onChange={(e) => {
+                const customer = customers.find(c => c.id === e.target.value);
+                setSelectedCustomer(customer || null);
+              }}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none"
+            >
+              <option value="">Select Customer</option>
+              {customers.map(c => (
+                <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
+              ))}
+            </select>
+          </div>
+
           <AnimatePresence initial={false}>
             {cart.length === 0 ? (
               <motion.div 
@@ -4076,13 +4447,12 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
             <div className="space-y-4 pt-2 border-t border-zinc-700/50">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-zinc-500 uppercase">Payment Method</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['Cash', 'Card', 'MTN Mobile Money'] as const).map((method) => (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(['Cash', 'Card', 'MTN Mobile Money', 'Credit'] as const).map((method) => (
                     <button
                       key={method}
                       onClick={() => {
                         setPaymentMethod(method);
-                        if (method === 'MTN Mobile Money') setAmountPaid(total.toString());
                       }}
                       className={cn(
                         "px-2 py-2 rounded-xl text-[10px] font-bold transition-all border",
@@ -4112,7 +4482,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
 
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold text-zinc-500 uppercase">
-                  {paymentMethod === 'MTN Mobile Money' ? 'Amount to Charge' : 'Amount Paid'}
+                  {paymentMethod === 'MTN Mobile Money' ? 'Amount to Charge' : paymentMethod === 'Credit' ? 'Credit Amount' : 'Amount Paid'}
                 </label>
                 <div className="relative w-32">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">
@@ -4123,20 +4493,40 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
                     value={amountPaid}
                     onChange={(e) => setAmountPaid(e.target.value)}
                     placeholder="0.00"
-                    disabled={paymentMethod === 'MTN Mobile Money'}
+                    disabled={paymentMethod === 'MTN Mobile Money' || paymentMethod === 'Credit'}
                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg pl-8 pr-3 py-2 text-sm text-zinc-100 focus:ring-1 focus:ring-indigo-500 outline-none text-right disabled:opacity-50"
                   />
                 </div>
               </div>
               
+              {paymentMethod === 'Credit' && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-zinc-500 uppercase">Amount Owing</span>
+                  <span className="text-sm font-bold text-rose-500">
+                    {formatCurrency(total, currentOrg?.currency)}
+                  </span>
+                </div>
+              )}
+              
               {paymentMethod !== 'MTN Mobile Money' && (
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-zinc-500 uppercase">Balance (Change)</span>
+                  <span className="text-xs font-bold text-zinc-500 uppercase">
+                    {paid > total ? 'Balance (Change)' : 'Balance'}
+                  </span>
                   <span className={cn(
                     "text-sm font-bold",
                     balance > 0 ? "text-emerald-500" : "text-zinc-500"
                   )}>
                     {formatCurrency(balance, currentOrg?.currency)}
+                  </span>
+                </div>
+              )}
+
+              {paymentMethod === 'Credit' && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-zinc-500 uppercase">Debt Amount</span>
+                  <span className="text-sm font-bold text-rose-500">
+                    {formatCurrency(Math.max(0, total - paid), currentOrg?.currency)}
                   </span>
                 </div>
               )}
@@ -4184,6 +4574,534 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
     </div>
   );
 };
+
+function Customers({ showNotification, createNotification, permissions }: { showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, permissions: any }) {
+  const { currentOrg, userProfile, db } = useFirebase();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '', address: '' });
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [search, setSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [payments, setPayments] = useState<DebtPayment[]>([]);
+  const [isPaying, setIsPaying] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'momo' | 'card'>('cash');
+  const [paymentNotes, setPaymentNotes] = useState('');
+
+  useEffect(() => {
+    if (!currentOrg) return;
+    return subscribeToCollection<Customer>(
+      `organizations/${currentOrg.id}/customers`,
+      [],
+      setCustomers
+    );
+  }, [currentOrg]);
+
+  useEffect(() => {
+    if (!currentOrg || !selectedCustomer) {
+      setPayments([]);
+      return;
+    }
+    return subscribeToCollection<DebtPayment>(
+      `organizations/${currentOrg.id}/customers/${selectedCustomer.id}/payments`,
+      [],
+      (data) => setPayments(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()))
+    );
+  }, [currentOrg, selectedCustomer]);
+
+  const handleAddCustomer = async () => {
+    if (!currentOrg || !newCustomer.name) return;
+    const now = new Date().toISOString();
+    const customerData = {
+      ...newCustomer,
+      totalDebt: 0,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const id = await createDocument(`organizations/${currentOrg.id}/customers`, customerData);
+    if (id) {
+      showNotification('Customer added successfully');
+      setIsAdding(false);
+      setNewCustomer({ name: '', phone: '', email: '', address: '' });
+    }
+  };
+
+  const handleUpdateCustomer = async () => {
+    if (!currentOrg || !editingCustomer) return;
+    const now = new Date().toISOString();
+    const success = await updateDocument(`organizations/${currentOrg.id}/customers`, editingCustomer.id, {
+      ...editingCustomer,
+      updatedAt: now
+    });
+    if (success) {
+      showNotification('Customer updated successfully');
+      setEditingCustomer(null);
+    }
+  };
+
+  const handleMakePayment = async () => {
+    if (!currentOrg || !selectedCustomer || !paymentAmount) return;
+    const amount = Number(paymentAmount);
+    if (amount <= 0 || amount > selectedCustomer.totalDebt) {
+      showNotification('Invalid payment amount', 'error');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const paymentData = {
+      customerId: selectedCustomer.id,
+      amount,
+      method: paymentMethod,
+      timestamp: now,
+      notes: paymentNotes
+    };
+
+    const paymentId = await createDocument(`organizations/${currentOrg.id}/customers/${selectedCustomer.id}/payments`, paymentData);
+    if (paymentId) {
+      const newDebt = selectedCustomer.totalDebt - amount;
+      await updateDocument(`organizations/${currentOrg.id}/customers`, selectedCustomer.id, {
+        totalDebt: newDebt,
+        updatedAt: now
+      });
+
+      // Also record as income transaction
+      await createDocument(`organizations/${currentOrg.id}/transactions`, {
+        type: 'income',
+        amount,
+        category: 'Debt Payment',
+        description: `Debt payment from ${selectedCustomer.name}`,
+        date: now,
+        paymentMethod: paymentMethod,
+        createdAt: now,
+        updatedAt: now
+      });
+
+      showNotification('Payment recorded successfully');
+      setIsPaying(false);
+      setPaymentAmount('');
+      setPaymentNotes('');
+      setSelectedCustomer({ ...selectedCustomer, totalDebt: newDebt });
+    }
+  };
+
+  const filteredCustomers = customers.filter(c => 
+    c.name.toLowerCase().includes(search.toLowerCase()) || 
+    c.phone?.includes(search)
+  );
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-4xl font-black text-zinc-100 tracking-tighter uppercase italic">Customer Debt</h2>
+          <p className="text-zinc-500 font-medium">Manage customer credits and payments</p>
+        </div>
+        <button 
+          onClick={() => setIsAdding(true)}
+          className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
+        >
+          <UserPlus className="w-5 h-5" />
+          Add Customer
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Customer List */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+            <input 
+              type="text" 
+              placeholder="Search customers..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl pl-12 pr-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+            <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+              {filteredCustomers.length === 0 ? (
+                <div className="p-12 text-center space-y-4 opacity-30">
+                  <Users className="w-12 h-12 mx-auto" />
+                  <p className="font-bold">No customers found</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-zinc-800/50">
+                  {filteredCustomers.map(customer => (
+                    <button
+                      key={customer.id}
+                      onClick={() => setSelectedCustomer(customer)}
+                      className={cn(
+                        "w-full p-4 text-left transition-all hover:bg-zinc-800/50 flex items-center justify-between group",
+                        selectedCustomer?.id === customer.id && "bg-indigo-600/10 border-l-4 border-indigo-600"
+                      )}
+                    >
+                      <div>
+                        <h4 className="font-bold text-zinc-100">{customer.name}</h4>
+                        <p className="text-xs text-zinc-500">{customer.phone || 'No phone'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={cn(
+                          "font-black",
+                          customer.totalDebt > 0 ? "text-rose-500" : "text-emerald-500"
+                        )}>
+                          {formatCurrency(customer.totalDebt, currentOrg?.currency)}
+                        </p>
+                        <p className="text-[10px] text-zinc-600 uppercase font-bold tracking-widest">Debt</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Customer Details & History */}
+        <div className="lg:col-span-2 space-y-6">
+          {selectedCustomer ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-6"
+            >
+              <div className="bg-zinc-900 border border-zinc-800 rounded-[32px] p-8 space-y-8">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-6">
+                    <div className="w-20 h-20 rounded-3xl bg-indigo-600 flex items-center justify-center text-3xl font-black text-white shadow-2xl shadow-indigo-600/20">
+                      {selectedCustomer.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="text-3xl font-black text-zinc-100 tracking-tight">{selectedCustomer.name}</h3>
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {selectedCustomer.phone && (
+                          <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                            <Phone className="w-4 h-4 text-indigo-500" />
+                            {selectedCustomer.phone}
+                          </div>
+                        )}
+                        {selectedCustomer.email && (
+                          <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                            <Mail className="w-4 h-4 text-indigo-500" />
+                            {selectedCustomer.email}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setEditingCustomer(selectedCustomer)}
+                      className="p-3 bg-zinc-800 text-zinc-400 hover:text-white rounded-xl transition-colors"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="bg-zinc-800/30 border border-zinc-800 rounded-2xl p-6">
+                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Current Debt</p>
+                    <p className="text-4xl font-black text-rose-500">{formatCurrency(selectedCustomer.totalDebt, currentOrg?.currency)}</p>
+                    {selectedCustomer.totalDebt > 0 && (
+                      <button 
+                        onClick={() => setIsPaying(true)}
+                        className="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
+                      >
+                        <CreditCard className="w-5 h-5" />
+                        Record Payment
+                      </button>
+                    )}
+                  </div>
+                  <div className="bg-zinc-800/30 border border-zinc-800 rounded-2xl p-6">
+                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Address</p>
+                    <p className="text-zinc-300 text-sm italic">{selectedCustomer.address || 'No address provided'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-[32px] overflow-hidden">
+                <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-800/30">
+                  <h3 className="font-bold text-zinc-100 flex items-center gap-2">
+                    <History className="w-5 h-5 text-indigo-500" />
+                    Payment History
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left border-b border-zinc-800">
+                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Date</th>
+                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Amount</th>
+                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Method</th>
+                        <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50">
+                      {payments.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-12 text-center text-zinc-500 italic text-sm">No payment history found</td>
+                        </tr>
+                      ) : (
+                        payments.map(payment => (
+                          <tr key={payment.id} className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="text-sm text-zinc-300">{new Date(payment.timestamp).toLocaleDateString()}</p>
+                              <p className="text-[10px] text-zinc-500">{new Date(payment.timestamp).toLocaleTimeString()}</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm font-bold text-emerald-500">+{formatCurrency(payment.amount, currentOrg?.currency)}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-[10px] font-bold bg-zinc-800 text-zinc-400 px-2 py-1 rounded uppercase">{payment.method}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="text-xs text-zinc-500 italic">{payment.notes || '-'}</p>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-30 py-20 bg-zinc-900/50 border-2 border-dashed border-zinc-800 rounded-[32px]">
+              <div className="w-24 h-24 rounded-full bg-zinc-800 flex items-center justify-center">
+                <Users className="w-12 h-12" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-zinc-100">No Customer Selected</h3>
+                <p className="text-zinc-500 mt-2">Select a customer from the list to view their details and debt history</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Customer Modal */}
+      <AnimatePresence>
+        {isAdding && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 border-b border-zinc-800 flex justify-between items-center bg-zinc-800/30">
+                <h3 className="text-2xl font-black text-zinc-100 tracking-tight">ADD NEW CUSTOMER</h3>
+                <button onClick={() => setIsAdding(false)} className="p-2 text-zinc-500 hover:text-white transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="p-8 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={newCustomer.name}
+                    onChange={(e) => setNewCustomer({...newCustomer, name: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="John Doe"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Phone Number</label>
+                    <input 
+                      type="tel" 
+                      value={newCustomer.phone}
+                      onChange={(e) => setNewCustomer({...newCustomer, phone: e.target.value})}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="077XXXXXXX"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={newCustomer.email}
+                      onChange={(e) => setNewCustomer({...newCustomer, email: e.target.value})}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Physical Address</label>
+                  <textarea 
+                    value={newCustomer.address}
+                    onChange={(e) => setNewCustomer({...newCustomer, address: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px]"
+                    placeholder="Street, City, Country"
+                  />
+                </div>
+                <button 
+                  onClick={handleAddCustomer}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-indigo-900/20"
+                >
+                  Create Customer Profile
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Customer Modal */}
+      <AnimatePresence>
+        {editingCustomer && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 border-b border-zinc-800 flex justify-between items-center bg-zinc-800/30">
+                <h3 className="text-2xl font-black text-zinc-100 tracking-tight">EDIT CUSTOMER</h3>
+                <button onClick={() => setEditingCustomer(null)} className="p-2 text-zinc-500 hover:text-white transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="p-8 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={editingCustomer.name}
+                    onChange={(e) => setEditingCustomer({...editingCustomer, name: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Phone Number</label>
+                    <input 
+                      type="tel" 
+                      value={editingCustomer.phone || ''}
+                      onChange={(e) => setEditingCustomer({...editingCustomer, phone: e.target.value})}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={editingCustomer.email || ''}
+                      onChange={(e) => setEditingCustomer({...editingCustomer, email: e.target.value})}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Physical Address</label>
+                  <textarea 
+                    value={editingCustomer.address || ''}
+                    onChange={(e) => setEditingCustomer({...editingCustomer, address: e.target.value})}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px]"
+                  />
+                </div>
+                <button 
+                  onClick={handleUpdateCustomer}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-indigo-900/20"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Record Payment Modal */}
+      <AnimatePresence>
+        {isPaying && selectedCustomer && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-900 border border-zinc-800 rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 border-b border-zinc-800 flex justify-between items-center bg-zinc-800/30">
+                <h3 className="text-2xl font-black text-zinc-100 tracking-tight">RECORD PAYMENT</h3>
+                <button onClick={() => setIsPaying(false)} className="p-2 text-zinc-500 hover:text-white transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="p-8 space-y-6">
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 text-center">
+                  <p className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-1">Total Debt Outstanding</p>
+                  <p className="text-3xl font-black text-rose-500">{formatCurrency(selectedCustomer.totalDebt, currentOrg?.currency)}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Payment Amount</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-bold">
+                      {getCurrencySymbol(currentOrg?.currency)}
+                    </span>
+                    <input 
+                      type="number" 
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl pl-12 pr-4 py-4 text-zinc-100 text-xl font-black focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Payment Method</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['cash', 'momo', 'card'] as const).map((method) => (
+                      <button
+                        key={method}
+                        onClick={() => setPaymentMethod(method)}
+                        className={cn(
+                          "py-3 rounded-xl text-xs font-bold transition-all border uppercase tracking-widest",
+                          paymentMethod === method 
+                            ? "bg-emerald-600 border-emerald-500 text-white" 
+                            : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                        )}
+                      >
+                        {method}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Notes</label>
+                  <input 
+                    type="text" 
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="Optional notes..."
+                  />
+                </div>
+
+                <button 
+                  onClick={handleMakePayment}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-emerald-900/20"
+                >
+                  Confirm Payment
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function Damages({ showNotification, createNotification, permissions, highlightedDamageId, setHighlightedDamageId }: { showNotification: (m: string, t?: 'success' | 'error') => void, createNotification: any, permissions: any, highlightedDamageId: string | null, setHighlightedDamageId: (id: string | null) => void }) {
   const { currentOrg, userProfile } = useFirebase();
@@ -5382,6 +6300,11 @@ function AffiliateView({ user, showNotification, setActiveTab }: { user: any, sh
           </div>
           <div className="space-y-4">
             <h2 className="text-4xl font-black text-zinc-100 uppercase tracking-tighter">Join Our Affiliate Program</h2>
+            <div className="bg-indigo-600/10 border border-indigo-500/20 py-3 px-6 rounded-2xl inline-block">
+              <p className="text-indigo-400 text-xl font-black uppercase tracking-widest">
+                Earn <span className="text-white text-2xl">10%</span> Commission
+              </p>
+            </div>
             <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
               Share JENA POS with your network and earn a <span className="text-indigo-500 font-bold">10% commission</span> for every business that signs up and makes their one-time payment.
             </p>
@@ -5430,10 +6353,24 @@ function AffiliateView({ user, showNotification, setActiveTab }: { user: any, sh
           </div>
           <div>
             <h2 className="text-3xl font-bold text-zinc-100">Affiliate Dashboard</h2>
-            <p className="text-zinc-400">Track your referrals and earnings</p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-zinc-400">Track your referrals and earnings</p>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-black rounded-full uppercase tracking-widest shadow-lg shadow-indigo-500/20">
+                  10% Commission Rate
+                </span>
+                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold rounded-full border border-emerald-500/20 uppercase tracking-widest">
+                  Active
+                </span>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 p-2 rounded-2xl">
+          <div className="px-4 py-2 bg-indigo-600/10 border border-indigo-500/20 rounded-xl">
+            <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Commission</p>
+            <p className="text-lg font-black text-white">10%</p>
+          </div>
           <div className="px-4 py-2 bg-zinc-800 rounded-xl">
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Your Code</p>
             <p className="text-lg font-black text-indigo-500 font-mono">{affiliate.affiliateCode}</p>
@@ -5464,7 +6401,7 @@ function AffiliateView({ user, showNotification, setActiveTab }: { user: any, sh
             <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Total Earned</span>
           </div>
           <p className="text-3xl font-black text-zinc-100">{formatCurrency(affiliate.totalEarnings, 'UGX')}</p>
-          <p className="text-xs text-zinc-500 mt-1">Lifetime earnings</p>
+          <p className="text-xs text-zinc-500 mt-1">Lifetime earnings at <span className="text-indigo-400 font-bold">10% commission</span></p>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
           <div className="flex items-center justify-between mb-4">
@@ -5549,6 +6486,22 @@ function AffiliateView({ user, showNotification, setActiveTab }: { user: any, sh
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="bg-indigo-600/5 border border-indigo-500/10 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-indigo-600/10 rounded-2xl flex items-center justify-center border border-indigo-600/20">
+            <Sparkles className="w-6 h-6 text-indigo-500" />
+          </div>
+          <div>
+            <h4 className="text-lg font-bold text-zinc-100">Program Details</h4>
+            <p className="text-sm text-zinc-400">You earn <span className="text-indigo-400 font-bold">10% commission</span> on every successful one-time payment from your referrals.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-zinc-500 font-medium">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <span>Automatic payouts via Mobile Money</span>
         </div>
       </div>
     </div>
@@ -5926,6 +6879,7 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
 
   const handleAccept = async () => {
     if (!isAccepted || (!hasScrolledToBottom && !isSuperAdmin)) return;
+
     setIsProcessing(true);
     setError(null);
     try {
@@ -6123,7 +7077,7 @@ function MomoPaymentModal({ planName, price, currency, onClose, onConfirm, isPro
 
 function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: 'light' | 'dark') => void }) {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate' | 'affiliate-referrals' | 'terms' | 'privacy'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'customers' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate' | 'affiliate-referrals' | 'terms' | 'privacy'>('dashboard');
   const [navigationHistory, setNavigationHistory] = useState<string[]>(['dashboard']);
   const [highlightedTxId, setHighlightedTxId] = useState<string | null>(null);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
@@ -6149,10 +7103,11 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCreatingOrg, setIsCreatingOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
+  const [newOrgType, setNewOrgType] = useState<'general' | 'medical'>('general');
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'business' | 'profile' | 'security' | 'notifications' | 'billing'>(() => {
+  const [settingsTab, setSettingsTab] = useState<'business' | 'profile' | 'security' | 'notifications' | 'billing' | 'affiliate'>(() => {
     const saved = localStorage.getItem('settingsTab');
     return (saved as any) || 'business';
   });
@@ -6162,6 +7117,59 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   }, [settingsTab]);
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [affiliateProfile, setAffiliateProfile] = useState<any>(null);
+  
+  // Expiry notifications logic
+  useEffect(() => {
+    if (!currentOrg || !inventory.length || !userProfile?.notificationPreferences?.inventory) return;
+
+    const checkExpiries = async () => {
+      const now = new Date();
+      const oneMonthFromNow = new Date();
+      oneMonthFromNow.setMonth(now.getMonth() + 1);
+
+      for (const item of inventory) {
+        if (!item.expiryDate) continue;
+
+        const expiry = new Date(item.expiryDate);
+        const isExpired = expiry < now;
+        const isExpiringSoon = expiry < oneMonthFromNow;
+
+        if (isExpiringSoon) {
+          // Check if we already notified for this item's current status
+          const notificationKey = `expiry_${item.id}_${item.expiryDate}`;
+          const lastNotified = localStorage.getItem(notificationKey);
+          
+          // Notify once every 7 days if still expiring soon/expired
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(now.getDate() - 7);
+          
+          if (!lastNotified || new Date(lastNotified) < sevenDaysAgo) {
+            const title = isExpired ? 'Product Expired' : 'Product Expiring Soon';
+            const message = isExpired 
+              ? `${item.name} (Batch: ${item.batchNumber || 'N/A'}) has expired on ${formatDate(item.expiryDate)}. Please remove from stock.`
+              : `${item.name} (Batch: ${item.batchNumber || 'N/A'}) will expire on ${formatDate(item.expiryDate)}. Consider ordering new stock.`;
+
+            await createDocument(`organizations/${currentOrg.id}/notifications`, {
+              type: 'inventory',
+              title,
+              message,
+              timestamp: now.toISOString(),
+              read: false,
+              data: { productId: item.id },
+              createdAt: now.toISOString()
+            });
+            
+            localStorage.setItem(notificationKey, now.toISOString());
+          }
+        }
+      }
+    };
+
+    checkExpiries();
+  }, [inventory, currentOrg, userProfile]);
+
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
 
@@ -6539,11 +7547,30 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       [],
       setStaff
     );
+    const unsubCustomers = subscribeToCollection<Customer>(
+      `organizations/${currentOrg.id}/customers`,
+      [],
+      setCustomers
+    );
     return () => {
       unsubInv();
       unsubStaff();
+      unsubCustomers();
     };
   }, [currentOrg]);
+
+  // Fetch affiliate profile
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = onSnapshot(doc(db, 'affiliates', user.uid), (doc) => {
+      if (doc.exists()) {
+        setAffiliateProfile(doc.data());
+      } else {
+        setAffiliateProfile(null);
+      }
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
@@ -6626,14 +7653,26 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         currency: 'USD',
         address: '',
         uprsRegistrationNumber: '',
-        plan: userProfile.plan,
+        plan: userProfile?.plan || 'trial',
         subscriptionStatus: 'active',
         isPaid: false,
         trialExpiresAt,
         referredBy: referralCode || '',
+        businessType: newOrgType,
         createdAt: new Date().toISOString(),
         ...(expiresAt && { expiresAt })
       });
+
+      if (success) {
+        // Add owner as admin staff member
+        await setDocument(`organizations/${orgId}/staff`, user.uid, {
+          uid: user.uid,
+          email: user.email,
+          displayName: userProfile?.displayName || user.displayName || 'Owner',
+          role: 'admin',
+          createdAt: new Date().toISOString()
+        });
+      }
 
       if (success && referralCode) {
         // Create referral record
@@ -6823,6 +7862,19 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
             />
           </div>
+          <div className="flex items-center gap-3 p-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/50">
+            <input 
+              type="checkbox" 
+              id="medical-type"
+              checked={newOrgType === 'medical'}
+              onChange={(e) => setNewOrgType(e.target.checked ? 'medical' : 'general')}
+              className="w-5 h-5 rounded border-zinc-700 bg-zinc-800 text-indigo-600 focus:ring-indigo-500"
+            />
+            <label htmlFor="medical-type" className="text-sm font-medium text-zinc-300 cursor-pointer">
+              Medical Pharmacy / Clinic
+              <p className="text-[10px] text-zinc-500 font-normal">Enable medical-specific inventory fields and POS patient tracking</p>
+            </label>
+          </div>
           <div className="flex gap-3">
             <button 
               onClick={() => setIsCreatingOrg(false)}
@@ -6922,6 +7974,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               <SidebarItem theme={theme} icon={Receipt} label={isSidebarOpen ? "Transactions" : ""} active={activeTab === 'transactions'} onClick={() => { setActiveTab('transactions'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             )}
             {permissions.canViewReports && (
+              <SidebarItem theme={theme} icon={Users} label={isSidebarOpen ? "Customers" : ""} active={activeTab === 'customers'} onClick={() => { setActiveTab('customers'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            )}
+            {permissions.canViewReports && (
               <SidebarItem theme={theme} icon={BarChart3} label={isSidebarOpen ? "Reports" : ""} active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             )}
             {permissions.canManageStaff && (
@@ -6930,7 +7985,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             {permissions.canAccessSettings && (
               <SidebarItem theme={theme} icon={Settings} label={isSidebarOpen ? "Settings" : ""} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
             )}
-            <SidebarItem theme={theme} icon={Share2} label={isSidebarOpen ? "Affiliate" : ""} active={activeTab === 'affiliate'} onClick={() => { setActiveTab('affiliate'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            {(affiliateProfile || isSuperAdmin) && (
+              <SidebarItem theme={theme} icon={Share2} label={isSidebarOpen ? "Affiliate" : ""} active={activeTab === 'affiliate'} onClick={() => { setActiveTab('affiliate'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
+            )}
             <SidebarItem theme={theme} icon={HelpCircle} label={isSidebarOpen ? "Help" : ""} active={activeTab === 'help'} onClick={() => { setActiveTab('help'); if(window.innerWidth < 1024) setIsSidebarOpen(false); }} />
           </nav>
 
@@ -7150,8 +8207,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               transition={{ duration: 0.2 }}
             >
                 {activeTab === 'dashboard' && <Dashboard setActiveTab={setActiveTab} setHighlightedTxId={setHighlightedTxId} isAdmin={isAdmin} isManager={isManager} />}
-                {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} createNotification={createNotification} userProfile={userProfile} permissions={permissions} />}
+                {activeTab === 'pos' && <POSView currentOrg={currentOrg} showNotification={showNotification} createNotification={createNotification} userProfile={userProfile} permissions={permissions} customers={customers} />}
                 {activeTab === 'inventory' && <Inventory showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedItemId={highlightedItemId} setHighlightedItemId={setHighlightedItemId} />}
+                {activeTab === 'customers' && <Customers showNotification={showNotification} createNotification={createNotification} permissions={permissions} />}
                 {activeTab === 'damages' && <Damages showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedDamageId={highlightedDamageId} setHighlightedDamageId={setHighlightedDamageId} />}
                 {activeTab === 'transactions' && <Transactions showNotification={showNotification} createNotification={createNotification} permissions={permissions} highlightedTxId={highlightedTxId} setHighlightedTxId={setHighlightedTxId} />}
                 {activeTab === 'admin' && <AdminPanel currentOrg={currentOrg} showNotification={showNotification} setIsCreatingOrg={setIsCreatingOrg} isSuperAdmin={isSuperAdmin} permissions={permissions} />}
@@ -7183,27 +8241,28 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                         { id: 'billing', label: 'Billing & Plan', icon: CreditCard, desc: 'Trial status & payments' },
                         { id: 'security', label: 'Security', icon: ShieldCheck, desc: 'Password & access control' },
                         { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Alerts & communication' },
+                        ...(!affiliateProfile ? [{ id: 'affiliate', label: 'Affiliate Program', icon: Share2, desc: 'Join our referral program' }] : [])
                       ].map((tab) => (
                         <button
                           key={tab.id}
                           onClick={() => setSettingsTab(tab.id as any)}
                           className={cn(
-                            "flex items-center gap-4 px-4 py-3 rounded-2xl transition-all text-left w-full group",
+                            "flex items-center gap-4 px-4 py-3 rounded-2xl transition-all text-left w-full group shrink-0 lg:shrink",
                             settingsTab === tab.id 
                               ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" 
                               : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
                           )}
                         >
                           <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors hidden lg:flex",
                             settingsTab === tab.id ? "bg-white/20" : "bg-zinc-800 group-hover:bg-zinc-700"
                           )}>
                             <tab.icon className="w-5 h-5" />
                           </div>
-                          <div className="hidden lg:block overflow-hidden">
+                          <div className="overflow-hidden">
                             <p className="text-sm font-bold truncate">{tab.label}</p>
                             <p className={cn(
-                              "text-[10px] truncate uppercase tracking-widest font-bold opacity-60",
+                              "text-[10px] truncate uppercase tracking-widest font-bold opacity-60 hidden lg:block",
                               settingsTab === tab.id ? "text-indigo-100" : "text-zinc-600"
                             )}>{tab.desc}</p>
                           </div>
@@ -7565,6 +8624,53 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                           </div>
                         )}
 
+                        {settingsTab === 'affiliate' && (
+                          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
+                            <div className="flex items-center gap-4 mb-2">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 flex items-center justify-center border border-indigo-600/20">
+                                <Share2 className="w-6 h-6 text-indigo-500" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-zinc-100">Affiliate Program</h3>
+                                <p className="text-sm text-zinc-500">Earn commissions by referring other businesses to JENA POS</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-indigo-600/10 border border-indigo-600/20 rounded-2xl p-8 text-center space-y-6">
+                              <div className="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center mx-auto shadow-2xl shadow-indigo-600/20">
+                                <Sparkles className="w-10 h-10 text-white" />
+                              </div>
+                              <div className="max-w-md mx-auto space-y-2">
+                                <h4 className="text-2xl font-black text-zinc-100 tracking-tight">Become an Affiliate Partner</h4>
+                                <p className="text-zinc-400 text-sm leading-relaxed">
+                                  Join our partner network and earn <span className="text-indigo-400 font-bold">10% recurring commission</span> for every business you refer that subscribes to a paid plan.
+                                </p>
+                              </div>
+                              <button 
+                                onClick={() => setActiveTab('affiliate')}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-4 rounded-2xl transition-all shadow-xl shadow-indigo-900/20 flex items-center gap-2 mx-auto"
+                              >
+                                <Share2 className="w-5 h-5" />
+                                Join Program Now
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              {[
+                                { title: 'Refer Businesses', desc: 'Share your unique link with other business owners.', icon: LinkIcon },
+                                { title: 'Track Signups', desc: 'Monitor your referrals and their subscription status.', icon: BarChart3 },
+                                { title: 'Earn Payouts', desc: 'Get paid directly via MTN Mobile Money every month.', icon: Wallet },
+                              ].map((item, i) => (
+                                <div key={i} className="p-6 bg-zinc-800/30 border border-zinc-800 rounded-2xl space-y-3">
+                                  <item.icon className="w-6 h-6 text-indigo-500" />
+                                  <h5 className="font-bold text-zinc-100">{item.title}</h5>
+                                  <p className="text-xs text-zinc-500 leading-relaxed">{item.desc}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {settingsTab === 'billing' && (
                           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-8 shadow-2xl">
                             <div className="flex items-center gap-4 mb-2">
@@ -7897,9 +9003,15 @@ function AuthScreen() {
           <div className="space-y-2">
             <h2 className="text-xl font-bold text-zinc-100">Get Started</h2>
             {referrerName ? (
-              <p className="text-sm text-indigo-400 font-medium bg-indigo-500/10 py-2 px-4 rounded-xl inline-block border border-indigo-500/20">
-                You were referred by <span className="font-bold">{referrerName}</span>
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm text-indigo-400 font-medium bg-indigo-500/10 py-2 px-4 rounded-xl inline-block border border-indigo-500/20">
+                  You were referred by <span className="font-bold">{referrerName}</span>
+                </p>
+                <div className="bg-emerald-500/10 border border-emerald-500/20 py-2 px-4 rounded-xl">
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Special Offer</p>
+                  <p className="text-xs text-emerald-400">Join via this link to support your referrer!</p>
+                </div>
+              </div>
             ) : (
               <p className="text-sm text-zinc-500">Sign in with your Google account to access all your business organizations.</p>
             )}

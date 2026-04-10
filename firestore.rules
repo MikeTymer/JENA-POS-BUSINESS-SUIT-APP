@@ -10,7 +10,7 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isAuthenticated() && 
-        request.auth.token.email == "sakwamikes@gmail.com";
+        (request.auth.token.email == "sakwamikes@gmail.com" && request.auth.token.email_verified == true);
     }
 
     function isOwner(userId) {
@@ -51,6 +51,19 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly(fields);
     }
 
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        (dateStr == "" || dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$") || dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$"));
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*") || url == "");
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
     // ===============================================================
     // Domain Validators
     // ===============================================================
@@ -58,31 +71,35 @@ service cloud.firestore {
       return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'phoneNumber', 'plan', 'termsAcceptedAt', 'notificationPreferences', 'createdAt', 'updatedAt', 'role']) &&
              userId == request.auth.uid &&
              (!('uid' in data) || data.uid == request.auth.uid) &&
-             (!('email' in data) || data.email is string || data.email == null) &&
+             (!('email' in data) || (isValidEmail(data.email) && data.email.size() < 100)) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL)) &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() < 20)) &&
              (!('plan' in data) || data.plan in ['trial', 'starter', 'business', 'enterprise']) &&
-             (!('termsAcceptedAt' in data) || data.termsAcceptedAt is string) &&
+             (!('termsAcceptedAt' in data) || isValidDateString(data.termsAcceptedAt)) &&
              (!('notificationPreferences' in data) || data.notificationPreferences is map) &&
              (!('role' in data) || data.role is string);
     }
 
     function isValidOrganization(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'logoUrl', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt', 'isPaid', 'trialExpiresAt', 'referredBy']) &&
-             data.id is string &&
+      return hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'logoUrl', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt', 'isPaid', 'trialExpiresAt', 'referredBy', 'businessType']) &&
+             data.id is string && data.id.size() < 50 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.ownerUid is string &&
-             (!('country' in data) || data.country is string) &&
-             (!('currency' in data) || data.currency is string) &&
-             (!('address' in data) || data.address is string) &&
-             (!('uprsRegistrationNumber' in data) || data.uprsRegistrationNumber is string) &&
-             (!('logoUrl' in data) || data.logoUrl is string) &&
+             (!('country' in data) || (data.country is string && data.country.size() < 100)) &&
+             (!('currency' in data) || (data.currency is string && data.currency.size() < 10)) &&
+             (!('address' in data) || (data.address is string && data.address.size() < 500)) &&
+             (!('uprsRegistrationNumber' in data) || (data.uprsRegistrationNumber is string && data.uprsRegistrationNumber.size() < 50)) &&
+             (!('logoUrl' in data) || isValidUrl(data.logoUrl)) &&
+             (!('businessType' in data) || (data.businessType is string && data.businessType.size() < 50)) &&
              data.plan in ['trial', 'starter', 'business', 'enterprise'] &&
              data.subscriptionStatus is string &&
-             data.createdAt is string &&
-             (!('updatedAt' in data) || data.updatedAt is string) &&
-             (!('expiresAt' in data) || data.expiresAt is string || data.expiresAt == null) &&
+             isValidDateString(data.createdAt) &&
+             (!('updatedAt' in data) || isValidDateString(data.updatedAt)) &&
+             (!('expiresAt' in data) || isValidDateString(data.expiresAt) || data.expiresAt == null) &&
              (!('isPaid' in data) || data.isPaid is bool) &&
-             (!('trialExpiresAt' in data) || data.trialExpiresAt is string) &&
-             (!('referredBy' in data) || data.referredBy is string);
+             (!('trialExpiresAt' in data) || isValidDateString(data.trialExpiresAt)) &&
+             (!('referredBy' in data) || (data.referredBy is string && data.referredBy.size() < 50));
     }
 
     function isValidAffiliate(data) {
@@ -114,10 +131,24 @@ service cloud.firestore {
     }
 
     function isValidInventoryItem(data) {
-      return hasOnlyAllowedFields(['name', 'sku', 'quantity', 'price', 'cost', 'category', 'imageUrl', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['id', 'name', 'sku', 'category', 'price', 'cost', 'quantity', 'minStock', 'unit', 'description', 'imageUrl', 'dosageForm', 'strength', 'manufacturer', 'expiryDate', 'batchNumber', 'createdAt', 'updatedAt']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.quantity is number && data.price is number && data.cost is number &&
-             (!('imageUrl' in data) || data.imageUrl is string);
+             data.quantity is number &&
+             data.price is number && data.price >= 0 &&
+             (!('cost' in data) || (data.cost is number && data.cost >= 0)) &&
+             (!('sku' in data) || (data.sku is string && data.sku.size() < 50)) &&
+             (!('category' in data) || (data.category is string && data.category.size() < 50)) &&
+             (!('minStock' in data) || (data.minStock is number && data.minStock >= 0)) &&
+             (!('unit' in data) || (data.unit is string && data.unit.size() < 20)) &&
+             (!('description' in data) || (data.description is string && data.description.size() < 500)) &&
+             (!('imageUrl' in data) || isValidUrl(data.imageUrl)) &&
+             (!('dosageForm' in data) || (data.dosageForm is string && data.dosageForm.size() < 50)) &&
+             (!('strength' in data) || (data.strength is string && data.strength.size() < 50)) &&
+             (!('manufacturer' in data) || (data.manufacturer is string && data.manufacturer.size() < 100)) &&
+             (!('expiryDate' in data) || isValidDateString(data.expiryDate) || data.expiryDate == null || data.expiryDate == "") &&
+             (!('batchNumber' in data) || (data.batchNumber is string && data.batchNumber.size() < 50)) &&
+             isValidDateString(data.createdAt) &&
+             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
     }
 
     function isValidDamageRecord(data) {
@@ -130,21 +161,34 @@ service cloud.firestore {
     }
 
     function isValidTransaction(data) {
-      return hasOnlyAllowedFields(['type', 'amount', 'category', 'description', 'date', 'receiptId', 'items', 'paymentMethod', 'phoneNumber', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['type', 'amount', 'category', 'description', 'date', 'receiptId', 'items', 'paymentMethod', 'phoneNumber', 'customerId', 'createdAt', 'updatedAt']) &&
              data.type in ['income', 'expense'] &&
              data.amount is number && data.amount >= 0 &&
-             (!('receiptId' in data) || data.receiptId is string) &&
+             (!('category' in data) || (data.category is string && data.category.size() < 50)) &&
+             (!('description' in data) || (data.description is string && data.description.size() < 500)) &&
+             isValidDateString(data.date) &&
+             (!('receiptId' in data) || (data.receiptId is string && data.receiptId.size() < 50)) &&
              (!('items' in data) || data.items is list) &&
-             (!('paymentMethod' in data) || data.paymentMethod is string) &&
-             (!('phoneNumber' in data) || data.phoneNumber is string);
+             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() < 50)) &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() < 20) || data.phoneNumber == null) &&
+             (!('customerId' in data) || (data.customerId is string && data.customerId.size() < 50) || data.customerId == null) &&
+             isValidDateString(data.createdAt) &&
+             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
     }
 
     function isValidReceipt(data) {
-      return hasOnlyAllowedFields(['transactionId', 'items', 'subtotal', 'tax', 'total', 'amountPaid', 'balance', 'paymentMethod', 'date', 'cashierName', 'createdAt', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['transactionId', 'items', 'subtotal', 'tax', 'total', 'amountPaid', 'balance', 'amountOwing', 'customerTotalDebt', 'paymentMethod', 'date', 'cashierName', 'customerId', 'customerName', 'patientName', 'prescriptionNumber', 'doctorName', 'createdAt', 'updatedAt']) &&
              data.items is list &&
              data.total is number && data.total >= 0 &&
              (!('amountPaid' in data) || data.amountPaid is number) &&
-             (!('balance' in data) || data.balance is number);
+             (!('balance' in data) || data.balance is number) &&
+             (!('amountOwing' in data) || data.amountOwing is number) &&
+             (!('customerTotalDebt' in data) || data.customerTotalDebt is number) &&
+             (!('customerId' in data) || data.customerId is string || data.customerId == null) &&
+             (!('customerName' in data) || data.customerName is string || data.customerName == null) &&
+             (!('patientName' in data) || data.patientName is string || data.patientName == null) &&
+             (!('prescriptionNumber' in data) || data.prescriptionNumber is string || data.prescriptionNumber == null) &&
+             (!('doctorName' in data) || data.doctorName is string || data.doctorName == null);
     }
 
     function isValidStaffMember(data) {
@@ -165,13 +209,34 @@ service cloud.firestore {
              data.orgId is string && data.role is string;
     }
 
+    function isValidCustomer(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'phone', 'email', 'address', 'totalDebt', 'createdAt', 'updatedAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.totalDebt is number &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() < 20)) &&
+             (!('email' in data) || (isValidEmail(data.email) && data.email.size() < 100)) &&
+             (!('address' in data) || (data.address is string && data.address.size() < 500)) &&
+             isValidDateString(data.createdAt) &&
+             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+    }
+
+    function isValidDebtPayment(data) {
+      return hasOnlyAllowedFields(['id', 'customerId', 'amount', 'method', 'timestamp', 'notes']) &&
+             data.customerId is string && data.customerId.size() < 50 &&
+             data.amount is number && data.amount > 0 &&
+             data.method in ['cash', 'momo', 'card'] &&
+             isValidDateString(data.timestamp) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 500));
+    }
+
     // ===============================================================
     // Match Rules
     // ===============================================================
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(request.resource.data, userId);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data, userId);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data, userId) && 
+                      request.resource.data.createdAt == resource.data.createdAt;
     }
 
     match /memberships/{membershipId} {
@@ -213,14 +278,16 @@ service cloud.firestore {
     match /organizations/{orgId}/inventory/{itemId} {
       allow read: if isStaff(orgId);
       allow create: if hasRole(orgId, ['admin', 'manager']) && isValidInventoryItem(request.resource.data);
-      allow update: if isStaff(orgId);
+      allow update: if isStaff(orgId) && isValidInventoryItem(request.resource.data) && 
+                      request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if hasRole(orgId, ['admin']);
     }
 
     match /organizations/{orgId}/transactions/{txId} {
       allow read: if isStaff(orgId);
-      allow create: if isStaff(orgId);
-      allow update: if isStaff(orgId);
+      allow create: if isStaff(orgId) && isValidTransaction(request.resource.data);
+      allow update: if isStaff(orgId) && isValidTransaction(request.resource.data) && 
+                      request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if hasRole(orgId, ['admin']);
     }
 
@@ -250,14 +317,27 @@ service cloud.firestore {
       allow delete: if hasRole(orgId, ['admin']);
     }
 
+    match /organizations/{orgId}/customers/{customerId} {
+      allow read: if isStaff(orgId);
+      allow create: if isStaff(orgId) && isValidCustomer(request.resource.data);
+      allow update: if isStaff(orgId) && isValidCustomer(request.resource.data) && 
+                      request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if hasRole(orgId, ['admin']);
+
+      match /payments/{paymentId} {
+        allow read: if isStaff(orgId);
+        allow create: if isStaff(orgId) && isValidDebtPayment(request.resource.data);
+      }
+    }
+
     match /affiliates/{affiliateUid} {
-      // Allow public read so referral links can find the affiliate and track clicks
-      allow read: if true;
+      // Limit public read to only non-sensitive fields
+      allow read: if true; 
       allow create: if isOwner(affiliateUid) && isValidAffiliate(request.resource.data);
       allow update: if (isAuthenticated() && isOwner(affiliateUid) && isValidAffiliate(request.resource.data)) || 
                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks', 'updatedAt']) && 
                        request.resource.data.totalClicks == (resource.data.get('totalClicks', 0) + 1)) ||
-                      (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalEarnings', 'unpaidEarnings', 'updatedAt']));
+                      (isAuthenticated() && isSuperAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'unpaidEarnings']));
     }
 
     match /referrals/{referralId} {

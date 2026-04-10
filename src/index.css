@@ -15,17 +15,17 @@
 }
 
 .light {
-  /* Backgrounds - Soft Blue-Gray to reduce eye strain */
-  --color-zinc-950: #f1f5f9; /* Main background - Slate 100 */
-  --color-zinc-900: #f8fafc; /* Card background - Slate 50 (Greyish White) */
-  --color-zinc-800: #e2e8f0; /* Borders - Slate 200 */
+  /* Backgrounds - Reverted to Slate palette as requested */
+  --color-zinc-950: #f1f5f9; /* Main background */
+  --color-zinc-900: #f8fafc; /* Card background */
+  --color-zinc-800: #e2e8f0; /* Borders */
   
-  /* Text - Deep Navy Blue */
-  --color-zinc-100: #0f172a; /* Primary text - Slate 900 */
-  --color-zinc-200: #1e293b; /* Secondary text - Slate 800 */
-  --color-zinc-300: #334155; /* Muted text - Slate 700 */
-  --color-zinc-400: #475569; /* Very muted text - Slate 600 */
-  --color-zinc-500: #64748b; /* Subtext - Slate 500 */
+  /* Text - Keeping the dark black text for readability */
+  --color-zinc-100: #09090b; /* Primary text (Black) */
+  --color-zinc-200: #18181b; /* Secondary text */
+  --color-zinc-300: #27272a; /* Muted text */
+  --color-zinc-400: #3f3f46; /* Very muted text */
+  --color-zinc-500: #52525b; /* Subtext */
   
   /* Other mappings */
   --color-zinc-600: #94a3b8;
@@ -38,6 +38,23 @@
 }
 
 @layer base {
+  html:not(.light) body {
+    text-shadow: 0 0 1px rgba(255, 255, 255, 0.2);
+  }
+
+  html:not(.light) h1, 
+  html:not(.light) h2, 
+  html:not(.light) h3, 
+  html:not(.light) h4, 
+  html:not(.light) h5, 
+  html:not(.light) h6,
+  html:not(.light) button,
+  html:not(.light) input,
+  html:not(.light) select,
+  html:not(.light) textarea {
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+  }
+
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;

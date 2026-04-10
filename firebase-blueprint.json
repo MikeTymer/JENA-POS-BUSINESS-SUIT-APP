@@ -32,6 +32,7 @@
         "isPaid": { "type": "boolean", "description": "Whether the one-time fee has been paid" },
         "trialExpiresAt": { "type": "string", "format": "date-time", "description": "When the 3-month trial expires" },
         "referredBy": { "type": "string", "description": "Affiliate code of the person who referred this organization" },
+        "businessType": { "type": "string", "enum": ["general", "medical"], "description": "Type of business (e.g., general retail, medical pharmacy)" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "ownerUid", "plan"]
@@ -94,6 +95,11 @@
         "price": { "type": "number" },
         "cost": { "type": "number" },
         "category": { "type": "string" },
+        "dosageForm": { "type": "string", "description": "e.g., Tablet, Syrup, Injection" },
+        "strength": { "type": "string", "description": "e.g., 500mg, 10ml" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "batchNumber": { "type": "string" },
+        "manufacturer": { "type": "string" },
         "imageUrl": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -164,6 +170,9 @@
         "tax": { "type": "number" },
         "total": { "type": "number" },
         "paymentMethod": { "type": "string" },
+        "patientName": { "type": "string" },
+        "prescriptionNumber": { "type": "string" },
+        "doctorName": { "type": "string" },
         "date": { "type": "string", "format": "date-time" },
         "cashierName": { "type": "string" }
       },
@@ -191,7 +200,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "type": { "type": "string", "enum": ["sale", "login", "logout", "system"] },
+        "type": { "type": "string", "enum": ["sale", "login", "logout", "system", "inventory", "damage", "expense"] },
         "title": { "type": "string" },
         "message": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" },
@@ -199,6 +208,36 @@
         "metadata": { "type": "object" }
       },
       "required": ["type", "title", "message", "timestamp"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer profile for credit/debt tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "totalDebt": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "totalDebt"]
+    },
+    "DebtPayment": {
+      "title": "Debt Payment",
+      "description": "Record of a payment made towards a customer's debt",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["customerId", "amount", "method", "timestamp"]
     }
   },
   "firestore": {
@@ -233,6 +272,14 @@
     "/organizations/{orgId}/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "System alerts and activity logs for the organization"
+    },
+    "/organizations/{orgId}/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customers of the organization"
+    },
+    "/organizations/{orgId}/customers/{customerId}/payments/{paymentId}": {
+      "schema": "DebtPayment",
+      "description": "Debt payment history for a customer"
     },
     "/memberships/{membershipId}": {
       "schema": "Membership",
