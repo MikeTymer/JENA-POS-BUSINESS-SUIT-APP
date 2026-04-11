@@ -8,7 +8,8 @@ import firebaseConfig from '../firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Enable offline persistence
+// Enable offline persistence - Disabled to prevent white screen issues in some environments
+/*
 if (typeof window !== 'undefined') {
   enableIndexedDbPersistence(db).catch((err) => {
     if (err.code === 'failed-precondition') {
@@ -20,6 +21,7 @@ if (typeof window !== 'undefined') {
     }
   });
 }
+*/
 
 export const auth = getAuth(app);
 export const storage = getStorage(app);

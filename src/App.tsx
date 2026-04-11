@@ -9567,7 +9567,7 @@ function AppContent() {
           <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
           <div className="text-center space-y-2">
             <p className="text-zinc-400 text-sm">Loading your profile...</p>
-            <p className="text-zinc-600 text-[10px] uppercase tracking-widest">{user.email}</p>
+            <p className="text-zinc-600 text-[10px] uppercase tracking-widest">{user.email || 'No Email'}</p>
           </div>
           <button 
             onClick={() => auth.signOut()}

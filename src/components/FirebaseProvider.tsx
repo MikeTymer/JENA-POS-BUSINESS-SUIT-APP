@@ -77,12 +77,17 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      console.log('Auth state changed:', firebaseUser ? 'User logged in' : 'No user');
       setUser(firebaseUser);
       if (!firebaseUser) {
         setUserProfile(null);
         setIsAuthReady(true);
         setLoading(false);
       }
+    }, (error) => {
+      console.error('Auth state change error:', error);
+      setIsAuthReady(true);
+      setLoading(false);
     });
 
     return () => unsubscribeAuth();
@@ -118,6 +123,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!isMounted) return;
 
       unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+        console.log('User profile snapshot received, exists:', docSnap.exists());
         if (isMounted && docSnap.exists()) {
           setUserProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
         }
