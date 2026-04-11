@@ -4282,12 +4282,44 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
       const now = new Date().toISOString();
       const effectivePaid = paymentMethod === 'Credit' ? 0 : paid;
       
+      // Auto-register patient as customer if not already selected
+      let finalCustomer = selectedCustomer;
+      if (!finalCustomer && patientName.trim()) {
+        const existingCustomer = customers.find(c => c.name.toLowerCase() === patientName.trim().toLowerCase());
+        if (existingCustomer) {
+          finalCustomer = existingCustomer;
+        } else {
+          // Create new customer
+          const newCustomerId = await createDocument(`organizations/${currentOrg.id}/customers`, {
+            name: patientName.trim(),
+            phone: phoneNumber || '',
+            email: '',
+            address: '',
+            totalDebt: 0,
+            createdAt: now,
+            updatedAt: now
+          });
+          if (newCustomerId) {
+            finalCustomer = {
+              id: newCustomerId,
+              name: patientName.trim(),
+              phone: phoneNumber || '',
+              email: '',
+              address: '',
+              totalDebt: 0,
+              createdAt: now,
+              updatedAt: now
+            };
+          }
+        }
+      }
+      
       // 1. Create transaction
       const txId = await createDocument(`organizations/${currentOrg.id}/transactions`, {
         type: 'income',
         amount: Math.min(effectivePaid, total),
         category: 'Sales',
-        description: `${paymentMethod === 'Credit' ? 'Credit Sale' : 'POS Sale'}: ${cart.map(i => `${i.quantity}x ${i.item.name}`).join(', ')}${selectedCustomer ? ` (Customer: ${selectedCustomer.name})` : ''}`,
+        description: `${paymentMethod === 'Credit' ? 'Credit Sale' : 'POS Sale'}: ${cart.map(i => `${i.quantity}x ${i.item.name}`).join(', ')}${finalCustomer ? ` (Customer: ${finalCustomer.name})` : ''}`,
         items: cart.map(i => ({
           id: i.item.id,
           name: i.item.name,
@@ -4300,7 +4332,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         updatedAt: now,
         paymentMethod: paymentMethod,
         phoneNumber: paymentMethod === 'MTN Mobile Money' ? phoneNumber : null,
-        customerId: selectedCustomer?.id || null,
+        customerId: finalCustomer?.id || null,
         dueDate: paymentMethod === 'Credit' ? dueDate : null
       });
 
@@ -4308,18 +4340,18 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
 
       // If credit sale, update customer debt
       let updatedTotalDebt = 0;
-      if (paymentMethod === 'Credit' && selectedCustomer) {
+      if (paymentMethod === 'Credit' && finalCustomer) {
         const debtAmount = total; // Full amount added to debt
-        updatedTotalDebt = (selectedCustomer.totalDebt || 0) + debtAmount;
+        updatedTotalDebt = (finalCustomer.totalDebt || 0) + debtAmount;
         if (debtAmount > 0) {
-        const customerRef = doc(db, `organizations/${currentOrg.id}/customers`, selectedCustomer.id);
+        const customerRef = doc(db, `organizations/${currentOrg.id}/customers`, finalCustomer.id);
         try {
           await updateDoc(customerRef, {
             totalDebt: increment(debtAmount),
             updatedAt: now
           });
         } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, `organizations/${currentOrg.id}/customers/${selectedCustomer.id}`);
+          handleFirestoreError(error, OperationType.UPDATE, `organizations/${currentOrg.id}/customers/${finalCustomer.id}`);
         }
         }
       }
@@ -4329,7 +4361,7 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         'sale',
         paymentMethod === 'Credit' ? 'New Credit Sale' : 'New Sale Made',
         `${userProfile?.displayName || 'A user'} made a sale of ${currentOrg.currency || 'UGX'} ${total.toLocaleString()}${paymentMethod === 'Credit' ? ` (Credit: ${currentOrg.currency} ${total.toLocaleString()})` : ''}`,
-        { txId, total, itemsCount: cart.length, customerId: selectedCustomer?.id }
+        { txId, total, itemsCount: cart.length, customerId: finalCustomer?.id }
       );
 
       // 2. Create Receipt
@@ -4359,9 +4391,9 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
         if (dueDate) receiptData.dueDate = dueDate;
       }
 
-      if (selectedCustomer) {
-        receiptData.customerId = selectedCustomer.id;
-        receiptData.customerName = selectedCustomer.name;
+      if (finalCustomer) {
+        receiptData.customerId = finalCustomer.id;
+        receiptData.customerName = finalCustomer.name;
       }
 
       if (patientName) receiptData.patientName = patientName;
@@ -4918,6 +4950,7 @@ function Customers({ showNotification, createNotification, permissions }: { show
         });
 
         showNotification('Payment recorded successfully');
+        
         setIsPaying(false);
         setPaymentAmount('');
         setPaymentNotes('');
@@ -7859,6 +7892,21 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     setShowNotifications(false);
   };
 
+  const handleClearAllNotifications = async () => {
+    if (!currentOrg || notifications.length === 0) return;
+    
+    try {
+      const promises = notifications.map(n => 
+        removeDocument(`organizations/${currentOrg.id}/notifications`, n.id)
+      );
+      await Promise.all(promises);
+      showNotification('All notifications cleared');
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+      showNotification('Failed to clear notifications', 'error');
+    }
+  };
+
   useEffect(() => {
     if (!currentOrg) return;
     const unsubInv = subscribeToCollection<InventoryItem>(
@@ -8405,100 +8453,93 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 
               <AnimatePresence>
                 {showNotifications && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowNotifications(false)} 
-                    />
-                    <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute top-full mt-3 right-0 w-80 sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden"
-                    >
-                      <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-                        <h3 className="font-bold text-zinc-100">Notifications</h3>
-                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                          {notifications.length} Total
-                        </span>
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[500px]"
+                  >
+                    <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+                      <div className="flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-indigo-500" />
+                        <h3 className="font-bold text-sm text-zinc-100">Notifications</h3>
                       </div>
-                      <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-                        {notifications.length === 0 ? (
-                          <div className="p-10 text-center space-y-2">
-                            <Bell className="w-8 h-8 text-zinc-700 mx-auto" />
-                            <p className="text-sm text-zinc-500">No notifications yet</p>
-                          </div>
-                        ) : (
-                          <div className="divide-y divide-zinc-800/50">
-                            {notifications.map((n) => (
-                              <div 
-                                key={n.id} 
-                                onClick={() => handleNotificationClick(n)}
-                                className={cn(
-                                  "p-4 hover:bg-zinc-800/50 transition-colors cursor-pointer group",
-                                  !n.read && "bg-indigo-500/5"
-                                )}
-                              >
-                                <div className="flex gap-3">
-                                  <div className={cn(
-                                    "mt-1 w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                                    n.type === 'sale' ? "bg-emerald-500/10 text-emerald-500" :
-                                    n.type === 'inventory' ? "bg-blue-500/10 text-blue-500" :
-                                    n.type === 'damage' ? "bg-rose-500/10 text-rose-500" :
-                                    n.type === 'expense' ? "bg-amber-500/10 text-amber-500" :
-                                    n.type === 'login' ? "bg-indigo-500/10 text-indigo-500" :
-                                    n.type === 'logout' ? "bg-amber-500/10 text-amber-500" :
-                                    "bg-zinc-500/10 text-zinc-500"
-                                  )}>
-                                    {n.type === 'sale' ? <ShoppingCart className="w-4 h-4" /> :
-                                     n.type === 'inventory' ? <Package className="w-4 h-4" /> :
-                                     n.type === 'damage' ? <AlertTriangle className="w-4 h-4" /> :
-                                     n.type === 'expense' ? <TrendingDown className="w-4 h-4" /> :
-                                     n.type === 'login' ? <ShieldCheck className="w-4 h-4" /> :
-                                     n.type === 'logout' ? <LogOut className="w-4 h-4" /> :
-                                     <Bell className="w-4 h-4" />}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <p className={cn("text-sm font-bold truncate", n.read ? "text-zinc-400" : "text-zinc-100")}>
-                                        {n.title}
-                                      </p>
-                                      <span className="text-[10px] text-zinc-500 whitespace-nowrap">
-                                        {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2 leading-relaxed">
-                                      {n.message}
+                      <div className="flex items-center gap-3">
+                        {notifications.length > 0 && (
+                          <button 
+                            onClick={handleClearAllNotifications}
+                            className="text-[10px] font-bold text-zinc-500 hover:text-rose-500 uppercase tracking-widest transition-colors"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => setShowNotifications(false)}
+                          className="p-1 text-rose-500 hover:text-rose-400 transition-colors"
+                        >
+                          <X className="w-6 h-6" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
+                      {notifications.length === 0 ? (
+                        <div className="p-12 text-center">
+                          <Bell className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
+                          <p className="text-xs text-zinc-500 font-medium">No new notifications</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-zinc-800/50">
+                          {notifications.map((n) => (
+                            <div 
+                              key={n.id} 
+                              onClick={() => handleNotificationClick(n)}
+                              className={cn(
+                                "p-4 hover:bg-zinc-800/50 transition-colors cursor-pointer group relative",
+                                !n.read && "bg-indigo-500/5"
+                              )}
+                            >
+                              {!n.read && (
+                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500" />
+                              )}
+                              <div className="flex gap-3">
+                                <div className={cn(
+                                  "mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border",
+                                  n.type === 'sale' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                  n.type === 'inventory' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
+                                  n.type === 'damage' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
+                                  n.type === 'expense' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
+                                  n.type === 'login' ? "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" :
+                                  n.type === 'logout' ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
+                                  "bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
+                                )}>
+                                  {n.type === 'sale' ? <ShoppingCart className="w-4 h-4" /> :
+                                   n.type === 'inventory' ? <Package className="w-4 h-4" /> :
+                                   n.type === 'damage' ? <AlertTriangle className="w-4 h-4" /> :
+                                   n.type === 'expense' ? <TrendingDown className="w-4 h-4" /> :
+                                   n.type === 'login' ? <ShieldCheck className="w-4 h-4" /> :
+                                   n.type === 'logout' ? <LogOut className="w-4 h-4" /> :
+                                   <Bell className="w-4 h-4" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className={cn("text-sm font-bold truncate", n.read ? "text-zinc-400" : "text-zinc-100")}>
+                                      {n.title}
                                     </p>
-                                    {n.type === 'sale' && n.metadata?.total && (
-                                      <div className="mt-2 flex items-center gap-2">
-                                        <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded uppercase">
-                                          {n.metadata.total.toLocaleString()} UGX
-                                        </span>
-                                        <span className="text-[10px] text-zinc-500">
-                                          {n.metadata.items} items
-                                        </span>
-                                      </div>
-                                    )}
+                                    <span className="text-[10px] text-zinc-500 whitespace-nowrap">
+                                      {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
                                   </div>
+                                  <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2 leading-relaxed">
+                                    {n.message}
+                                  </p>
                                 </div>
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {notifications.length > 0 && (
-                        <div className="p-3 bg-zinc-900/80 border-t border-zinc-800 text-center">
-                          <button 
-                            onClick={() => setShowNotifications(false)}
-                            className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300 uppercase tracking-widest"
-                          >
-                            Close Panel
-                          </button>
+                            </div>
+                          ))}
                         </div>
                       )}
-                    </motion.div>
-                  </>
+                    </div>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </div>
