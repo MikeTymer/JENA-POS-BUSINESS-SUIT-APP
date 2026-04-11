@@ -8587,36 +8587,36 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
 
                 <div className="flex flex-col lg:flex-row gap-12">
                   {/* Sidebar Navigation */}
-                  <aside className="w-full lg:w-72 shrink-0">
+                  <aside className="w-full lg:w-24 shrink-0">
                     <nav className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-4 lg:pb-0 no-scrollbar">
                       {[
-                        { id: 'business', label: 'Business Profile', icon: Building2, desc: 'Company details & identity' },
-                        { id: 'profile', label: 'Personal Profile', icon: User, desc: 'Your account & appearance' },
-                        { id: 'billing', label: 'Billing & Plan', icon: CreditCard, desc: 'Trial status & payments' },
-                        { id: 'security', label: 'Security', icon: ShieldCheck, desc: 'Password & access control' },
-                        { id: 'notifications', label: 'Notifications', icon: Bell, desc: 'Alerts & communication' },
-                        ...(!affiliateProfile ? [{ id: 'affiliate', label: 'Affiliate Program', icon: Share2, desc: 'Join our referral program' }] : [])
+                        { id: 'business', label: 'Business', icon: Building2, desc: 'Profile' },
+                        { id: 'profile', label: 'Profile', icon: User, desc: 'Personal' },
+                        { id: 'billing', label: 'Billing', icon: CreditCard, desc: 'Plan' },
+                        { id: 'security', label: 'Security', icon: ShieldCheck, desc: 'Access' },
+                        { id: 'notifications', label: 'Alerts', icon: Bell, desc: 'Notify' },
+                        ...(!affiliateProfile ? [{ id: 'affiliate', label: 'Affiliate', icon: Share2, desc: 'Join' }] : [])
                       ].map((tab) => (
                         <button
                           key={tab.id}
                           onClick={() => setSettingsTab(tab.id as any)}
                           className={cn(
-                            "flex items-center gap-4 px-4 py-3 rounded-2xl transition-all text-left w-full group shrink-0 lg:shrink",
+                            "flex flex-col items-center justify-center gap-1 px-2 py-3 rounded-2xl transition-all text-center w-full group shrink-0 lg:shrink",
                             settingsTab === tab.id 
                               ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" 
                               : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
                           )}
                         >
                           <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors hidden lg:flex",
+                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors",
                             settingsTab === tab.id ? "bg-white/20" : "bg-zinc-800 group-hover:bg-zinc-700"
                           )}>
                             <tab.icon className="w-5 h-5" />
                           </div>
-                          <div className="overflow-hidden">
-                            <p className="text-sm font-bold truncate">{tab.label}</p>
+                          <div className="flex flex-col items-center">
+                            <p className="text-[10px] font-black uppercase tracking-tighter leading-none">{tab.label}</p>
                             <p className={cn(
-                              "text-[10px] truncate uppercase tracking-widest font-bold opacity-60 hidden lg:block",
+                              "text-[8px] uppercase tracking-widest font-bold opacity-60",
                               settingsTab === tab.id ? "text-indigo-100" : "text-zinc-600"
                             )}>{tab.desc}</p>
                           </div>

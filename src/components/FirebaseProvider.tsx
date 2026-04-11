@@ -76,68 +76,71 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
 
   useEffect(() => {
-    let unsubscribeUser: (() => void) | null = null;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      
-      if (unsubscribeUser) {
-        unsubscribeUser();
-        unsubscribeUser = null;
-      }
-
-      if (firebaseUser) {
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
-        
-        const initializeUser = async () => {
-          try {
-            const docSnap = await getDoc(userDocRef);
-            if (!docSnap.exists()) {
-              const newProfile = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email,
-                displayName: firebaseUser.displayName,
-                photoURL: firebaseUser.photoURL,
-                phoneNumber: firebaseUser.phoneNumber,
-                plan: 'trial',
-                createdAt: new Date().toISOString()
-              };
-              await setDoc(userDocRef, newProfile);
-            }
-          } catch (err) {
-            console.error("Failed to initialize user profile:", err);
-          }
-
-          // Start listener after initial check/creation
-          // Check if the user is still the same before subscribing
-          if (auth.currentUser?.uid === firebaseUser.uid) {
-            unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
-              if (docSnap.exists()) {
-                setUserProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
-              }
-              setIsAuthReady(true);
-              setLoading(false);
-            }, (error) => {
-              console.error("User profile snapshot error:", error);
-              setIsAuthReady(true);
-              setLoading(false);
-            });
-          }
-        };
-
-        initializeUser();
-      } else {
+      if (!firebaseUser) {
         setUserProfile(null);
         setIsAuthReady(true);
         setLoading(false);
       }
     });
 
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let unsubscribeUser: (() => void) | null = null;
+    let isMounted = true;
+
+    const initializeAndListen = async () => {
+      const userDocRef = doc(db, 'users', user.uid);
+      
+      try {
+        const docSnap = await getDoc(userDocRef);
+        if (isMounted && !docSnap.exists()) {
+          const newProfile = {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            phoneNumber: user.phoneNumber,
+            plan: 'trial',
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(userDocRef, newProfile);
+        }
+      } catch (err) {
+        console.error("Failed to initialize user profile:", err);
+      }
+
+      if (!isMounted) return;
+
+      unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+        if (isMounted && docSnap.exists()) {
+          setUserProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
+        }
+        if (isMounted) {
+          setIsAuthReady(true);
+          setLoading(false);
+        }
+      }, (error) => {
+        console.error("User profile snapshot error:", error);
+        if (isMounted) {
+          setIsAuthReady(true);
+          setLoading(false);
+        }
+      });
+    };
+
+    initializeAndListen();
+
     return () => {
-      unsubscribeAuth();
+      isMounted = false;
       if (unsubscribeUser) unsubscribeUser();
     };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -211,19 +214,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
 
-    const unsubs = staffOrgIds.map(id => 
-      onSnapshot(doc(db, 'organizations', id), (docSnap) => {
+    // Use a map to track active listeners to avoid redundant subscriptions
+    const activeListeners = new Map<string, () => void>();
+
+    staffOrgIds.forEach(id => {
+      const unsub = onSnapshot(doc(db, 'organizations', id), (docSnap) => {
         if (docSnap.exists()) {
           setStaffOrgs(prev => {
             const other = prev.filter(o => o.id !== id);
             return [...other, { id: docSnap.id, ...docSnap.data() } as Organization];
           });
         }
-      })
-    );
+      });
+      activeListeners.set(id, unsub);
+    });
 
-    return () => unsubs.forEach(unsub => unsub());
-  }, [user, staffOrgIds]);
+    return () => {
+      activeListeners.forEach(unsub => unsub());
+    };
+  }, [user, staffOrgIds.join(',')]); // Use join to stabilize dependency
 
   // 5. Combine and set final organizations list
   useEffect(() => {
