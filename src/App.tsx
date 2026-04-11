@@ -58,6 +58,7 @@ import {
   MapPin,
   Hash,
   Bell,
+  Send,
   Clock,
   Sun,
   Moon,
@@ -90,6 +91,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
+import { generatePaymentReminder } from './services/geminiService';
 import { auth, db, storage, handleFirestoreError, OperationType } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { FirebaseProvider, useFirebase, Organization, UserProfile } from './components/FirebaseProvider';
@@ -4786,6 +4788,7 @@ function Customers({ showNotification, createNotification, permissions }: { show
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
 
   useEffect(() => {
     if (!currentOrg) return;
@@ -4929,6 +4932,38 @@ function Customers({ showNotification, createNotification, permissions }: { show
     }
   };
 
+  const handleSendReminder = async () => {
+    if (!selectedCustomer || selectedCustomer.totalDebt <= 0) return;
+    
+    setIsSendingReminder(true);
+    try {
+      const message = await generatePaymentReminder(
+        selectedCustomer.name, 
+        selectedCustomer.totalDebt, 
+        currentOrg?.currency
+      );
+      
+      // In a real app, you would call an SMS/Email API here.
+      // For this demo, we'll simulate the "sending" and show the generated message.
+      console.log(`Sending reminder to ${selectedCustomer.phone || selectedCustomer.email}: ${message}`);
+      
+      // Create a system notification about the reminder
+      await createNotification({
+        type: 'system',
+        title: 'Payment Reminder Sent',
+        message: `A reminder was generated for ${selectedCustomer.name}: "${message.substring(0, 50)}..."`,
+        timestamp: new Date().toISOString()
+      });
+
+      showNotification(`Reminder sent to ${selectedCustomer.name}`);
+    } catch (error) {
+      console.error("Failed to send reminder:", error);
+      showNotification("Failed to send reminder", "error");
+    } finally {
+      setIsSendingReminder(false);
+    }
+  };
+
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
     c.phone?.includes(search)
@@ -4982,9 +5017,19 @@ function Customers({ showNotification, createNotification, permissions }: { show
                         selectedCustomer?.id === customer.id && "bg-indigo-600/10 border-l-4 border-indigo-600"
                       )}
                     >
-                      <div>
-                        <h4 className="font-bold text-zinc-100">{customer.name}</h4>
-                        <p className="text-xs text-zinc-500">{customer.phone || 'No phone'}</p>
+                      <div className="flex items-center gap-3">
+                        {customer.totalDebt > 0 && (
+                          <div className="relative">
+                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full border-2 border-zinc-900 animate-pulse" />
+                            <AlertCircle className="w-5 h-5 text-rose-500/50" />
+                          </div>
+                        )}
+                        <div>
+                          <h4 className="font-bold text-zinc-100 flex items-center gap-2">
+                            {customer.name}
+                          </h4>
+                          <p className="text-xs text-zinc-500">{customer.phone || 'No phone'}</p>
+                        </div>
                       </div>
                       <div className="text-right">
                         <p className={cn(
@@ -5050,13 +5095,27 @@ function Customers({ showNotification, createNotification, permissions }: { show
                     <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Current Debt</p>
                     <p className="text-4xl font-black text-rose-500">{formatCurrency(selectedCustomer.totalDebt, currentOrg?.currency)}</p>
                     {selectedCustomer.totalDebt > 0 && (
-                      <button 
-                        onClick={() => setIsPaying(true)}
-                        className="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
-                      >
-                        <CreditCard className="w-5 h-5" />
-                        Record Payment
-                      </button>
+                      <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                        <button 
+                          onClick={() => setIsPaying(true)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
+                        >
+                          <CreditCard className="w-5 h-5" />
+                          Record Payment
+                        </button>
+                        <button 
+                          onClick={handleSendReminder}
+                          disabled={isSendingReminder}
+                          className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 border border-zinc-700 disabled:opacity-50"
+                        >
+                          {isSendingReminder ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Send className="w-5 h-5 text-indigo-500" />
+                          )}
+                          Send Reminder
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="bg-zinc-800/30 border border-zinc-800 rounded-2xl p-6">

@@ -63,15 +63,15 @@ service cloud.firestore {
              userId == request.auth.uid &&
              (!('uid' in data) || data.uid == request.auth.uid) &&
              (!('email' in data) || isValidEmail(data.email)) &&
-             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
-             (!('photoURL' in data) || isValidUrl(data.photoURL)) &&
-             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() < 20)) &&
+             (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('photoURL' in data) || data.photoURL == null || isValidUrl(data.photoURL)) &&
+             (!('phoneNumber' in data) || data.phoneNumber == null || (data.phoneNumber is string && data.phoneNumber.size() < 20)) &&
              (!('plan' in data) || data.plan in ['trial', 'starter', 'business', 'enterprise']) &&
-             (!('termsAcceptedAt' in data) || isValidDateString(data.termsAcceptedAt)) &&
-             (!('notificationPreferences' in data) || data.notificationPreferences is map) &&
-             (!('role' in data) || (data.role is string && data.role.size() < 50)) &&
-             (!('createdAt' in data) || isValidDateString(data.createdAt)) &&
-             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+             (!('termsAcceptedAt' in data) || data.termsAcceptedAt == null || isValidDateString(data.termsAcceptedAt)) &&
+             (!('notificationPreferences' in data) || data.notificationPreferences == null || data.notificationPreferences is map) &&
+             (!('role' in data) || data.role == null || (data.role is string && data.role.size() < 50)) &&
+             (!('createdAt' in data) || data.createdAt == null || isValidDateString(data.createdAt)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || isValidDateString(data.updatedAt));
     }
 
     function isValidOrganization(data) {
@@ -80,20 +80,20 @@ service cloud.firestore {
              data.id is string && data.id.size() < 50 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.ownerUid is string && data.ownerUid.size() < 100 &&
-             (!('country' in data) || (data.country is string && data.country.size() < 100)) &&
-             (!('currency' in data) || (data.currency is string && data.currency.size() < 10)) &&
-             (!('address' in data) || (data.address is string && data.address.size() < 500)) &&
-             (!('uprsRegistrationNumber' in data) || (data.uprsRegistrationNumber is string && data.uprsRegistrationNumber.size() < 50)) &&
-             (!('logoUrl' in data) || isValidUrl(data.logoUrl)) &&
-             (!('businessType' in data) || (data.businessType is string && data.businessType.size() < 50)) &&
+             (!('country' in data) || data.country == null || (data.country is string && data.country.size() < 100)) &&
+             (!('currency' in data) || data.currency == null || (data.currency is string && data.currency.size() < 10)) &&
+             (!('address' in data) || data.address == null || (data.address is string && data.address.size() < 500)) &&
+             (!('uprsRegistrationNumber' in data) || data.uprsRegistrationNumber == null || (data.uprsRegistrationNumber is string && data.uprsRegistrationNumber.size() < 50)) &&
+             (!('logoUrl' in data) || data.logoUrl == null || isValidUrl(data.logoUrl)) &&
+             (!('businessType' in data) || data.businessType == null || (data.businessType is string && data.businessType.size() < 50)) &&
              data.plan in ['trial', 'starter', 'business', 'enterprise'] &&
              data.subscriptionStatus is string && data.subscriptionStatus.size() < 50 &&
-             (!('createdAt' in data) || isValidDateString(data.createdAt)) &&
-             (!('updatedAt' in data) || isValidDateString(data.updatedAt)) &&
-             (!('expiresAt' in data) || isValidDateString(data.expiresAt) || data.expiresAt == null) &&
-             (!('isPaid' in data) || data.isPaid is bool) &&
-             (!('trialExpiresAt' in data) || isValidDateString(data.trialExpiresAt)) &&
-             (!('referredBy' in data) || (data.referredBy is string && data.referredBy.size() < 50));
+             (!('createdAt' in data) || data.createdAt == null || isValidDateString(data.createdAt)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || isValidDateString(data.updatedAt)) &&
+             (!('expiresAt' in data) || data.expiresAt == null || isValidDateString(data.expiresAt)) &&
+             (!('isPaid' in data) || data.isPaid == null || data.isPaid is bool) &&
+             (!('trialExpiresAt' in data) || data.trialExpiresAt == null || isValidDateString(data.trialExpiresAt)) &&
+             (!('referredBy' in data) || data.referredBy == null || (data.referredBy is string && data.referredBy.size() < 50));
     }
 
     function isValidInventoryItem(data) {
@@ -102,20 +102,20 @@ service cloud.firestore {
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.quantity is number &&
              isPositive(data.price) &&
-             (!('cost' in data) || isPositive(data.cost)) &&
-             (!('sku' in data) || (data.sku is string && data.sku.size() < 50)) &&
-             (!('category' in data) || (data.category is string && data.category.size() < 50)) &&
-             (!('minStock' in data) || isPositive(data.minStock)) &&
-             (!('unit' in data) || (data.unit is string && data.unit.size() < 20)) &&
-             (!('description' in data) || (data.description is string && data.description.size() < 500)) &&
-             (!('imageUrl' in data) || isValidUrl(data.imageUrl)) &&
-             (!('dosageForm' in data) || (data.dosageForm is string && data.dosageForm.size() < 50)) &&
-             (!('strength' in data) || (data.strength is string && data.strength.size() < 50)) &&
-             (!('manufacturer' in data) || (data.manufacturer is string && data.manufacturer.size() < 100)) &&
-             (!('expiryDate' in data) || isValidDateString(data.expiryDate) || data.expiryDate == null || data.expiryDate == "") &&
-             (!('batchNumber' in data) || (data.batchNumber is string && data.batchNumber.size() < 50)) &&
-             (!('createdAt' in data) || isValidDateString(data.createdAt)) &&
-             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+             (!('cost' in data) || data.cost == null || isPositive(data.cost)) &&
+             (!('sku' in data) || data.sku == null || (data.sku is string && data.sku.size() < 50)) &&
+             (!('category' in data) || data.category == null || (data.category is string && data.category.size() < 50)) &&
+             (!('minStock' in data) || data.minStock == null || isPositive(data.minStock)) &&
+             (!('unit' in data) || data.unit == null || (data.unit is string && data.unit.size() < 20)) &&
+             (!('description' in data) || data.description == null || (data.description is string && data.description.size() < 500)) &&
+             (!('imageUrl' in data) || data.imageUrl == null || isValidUrl(data.imageUrl)) &&
+             (!('dosageForm' in data) || data.dosageForm == null || (data.dosageForm is string && data.dosageForm.size() < 50)) &&
+             (!('strength' in data) || data.strength == null || (data.strength is string && data.strength.size() < 50)) &&
+             (!('manufacturer' in data) || data.manufacturer == null || (data.manufacturer is string && data.manufacturer.size() < 100)) &&
+             (!('expiryDate' in data) || data.expiryDate == null || isValidDateString(data.expiryDate) || data.expiryDate == "") &&
+             (!('batchNumber' in data) || data.batchNumber == null || (data.batchNumber is string && data.batchNumber.size() < 50)) &&
+             (!('createdAt' in data) || data.createdAt == null || isValidDateString(data.createdAt)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || isValidDateString(data.updatedAt));
     }
 
     function isValidTransaction(data) {
@@ -123,17 +123,17 @@ service cloud.firestore {
              hasOnlyAllowedFields(['type', 'amount', 'category', 'description', 'date', 'receiptId', 'items', 'paymentMethod', 'phoneNumber', 'customerId', 'dueDate', 'createdAt', 'updatedAt']) &&
              data.type in ['income', 'expense'] &&
              isPositive(data.amount) &&
-             (!('category' in data) || (data.category is string && data.category.size() < 50)) &&
-             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             (!('category' in data) || data.category == null || (data.category is string && data.category.size() < 50)) &&
+             (!('description' in data) || data.description == null || (data.description is string && data.description.size() < 2000)) &&
              isValidDateString(data.date) &&
-             (!('receiptId' in data) || (data.receiptId is string && data.receiptId.size() < 50)) &&
-             (!('items' in data) || isValidList(data.items, 100)) &&
-             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() < 50)) &&
-             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() < 20) || data.phoneNumber == null) &&
-             (!('customerId' in data) || (data.customerId is string && data.customerId.size() < 50) || data.customerId == null) &&
-             (!('dueDate' in data) || isValidDateString(data.dueDate) || data.dueDate == null) &&
-             (!('createdAt' in data) || isValidDateString(data.createdAt)) &&
-             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+             (!('receiptId' in data) || data.receiptId == null || (data.receiptId is string && data.receiptId.size() < 50)) &&
+             (!('items' in data) || data.items == null || isValidList(data.items, 100)) &&
+             (!('paymentMethod' in data) || data.paymentMethod == null || (data.paymentMethod is string && data.paymentMethod.size() < 50)) &&
+             (!('phoneNumber' in data) || data.phoneNumber == null || (data.phoneNumber is string && data.phoneNumber.size() < 20)) &&
+             (!('customerId' in data) || data.customerId == null || (data.customerId is string && data.customerId.size() < 50)) &&
+             (!('dueDate' in data) || data.dueDate == null || isValidDateString(data.dueDate)) &&
+             (!('createdAt' in data) || data.createdAt == null || isValidDateString(data.createdAt)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || isValidDateString(data.updatedAt));
     }
 
     function isValidReceipt(data) {
@@ -141,24 +141,24 @@ service cloud.firestore {
              hasOnlyAllowedFields(['transactionId', 'items', 'subtotal', 'tax', 'total', 'amountPaid', 'balance', 'amountOwing', 'customerTotalDebt', 'paymentMethod', 'date', 'cashierName', 'customerId', 'customerName', 'dueDate', 'patientName', 'prescriptionNumber', 'doctorName', 'createdAt', 'updatedAt']) &&
              isValidList(data.items, 100) &&
              isPositive(data.total) &&
-             (!('transactionId' in data) || (data.transactionId is string && data.transactionId.size() < 50)) &&
-             (!('subtotal' in data) || isPositive(data.subtotal)) &&
-             (!('tax' in data) || isPositive(data.tax)) &&
-             (!('amountPaid' in data) || isPositive(data.amountPaid)) &&
-             (!('balance' in data) || isPositive(data.balance)) &&
-             (!('amountOwing' in data) || isPositive(data.amountOwing)) &&
-             (!('customerTotalDebt' in data) || isPositive(data.customerTotalDebt)) &&
-             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() < 50)) &&
-             (!('date' in data) || isValidDateString(data.date)) &&
-             (!('cashierName' in data) || (data.cashierName is string && data.cashierName.size() < 200)) &&
-             (!('customerId' in data) || (data.customerId is string && data.customerId.size() < 50) || data.customerId == null) &&
-             (!('customerName' in data) || (data.customerName is string && data.customerName.size() < 100) || data.customerName == null) &&
-             (!('dueDate' in data) || isValidDateString(data.dueDate) || data.dueDate == null) &&
-             (!('patientName' in data) || (data.patientName is string && data.patientName.size() < 100) || data.patientName == null) &&
-             (!('prescriptionNumber' in data) || (data.prescriptionNumber is string && data.prescriptionNumber.size() < 100) || data.prescriptionNumber == null) &&
-             (!('doctorName' in data) || (data.doctorName is string && data.doctorName.size() < 100) || data.doctorName == null) &&
-             (!('createdAt' in data) || isValidDateString(data.createdAt)) &&
-             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+             (!('transactionId' in data) || data.transactionId == null || (data.transactionId is string && data.transactionId.size() < 50)) &&
+             (!('subtotal' in data) || data.subtotal == null || isPositive(data.subtotal)) &&
+             (!('tax' in data) || data.tax == null || isPositive(data.tax)) &&
+             (!('amountPaid' in data) || data.amountPaid == null || isPositive(data.amountPaid)) &&
+             (!('balance' in data) || data.balance == null || isPositive(data.balance)) &&
+             (!('amountOwing' in data) || data.amountOwing == null || isPositive(data.amountOwing)) &&
+             (!('customerTotalDebt' in data) || data.customerTotalDebt == null || isPositive(data.customerTotalDebt)) &&
+             (!('paymentMethod' in data) || data.paymentMethod == null || (data.paymentMethod is string && data.paymentMethod.size() < 50)) &&
+             (!('date' in data) || data.date == null || isValidDateString(data.date)) &&
+             (!('cashierName' in data) || data.cashierName == null || (data.cashierName is string && data.cashierName.size() < 200)) &&
+             (!('customerId' in data) || data.customerId == null || (data.customerId is string && data.customerId.size() < 50)) &&
+             (!('customerName' in data) || data.customerName == null || (data.customerName is string && data.customerName.size() < 100)) &&
+             (!('dueDate' in data) || data.dueDate == null || isValidDateString(data.dueDate)) &&
+             (!('patientName' in data) || data.patientName == null || (data.patientName is string && data.patientName.size() < 100)) &&
+             (!('prescriptionNumber' in data) || data.prescriptionNumber == null || (data.prescriptionNumber is string && data.prescriptionNumber.size() < 100)) &&
+             (!('doctorName' in data) || data.doctorName == null || (data.doctorName is string && data.doctorName.size() < 100)) &&
+             (!('createdAt' in data) || data.createdAt == null || isValidDateString(data.createdAt)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || isValidDateString(data.updatedAt));
     }
 
     function isValidDamageRecord(data) {
@@ -206,21 +206,23 @@ service cloud.firestore {
              hasOnlyAllowedFields(['id', 'name', 'phone', 'email', 'address', 'totalDebt', 'createdAt', 'updatedAt']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              isPositive(data.totalDebt) &&
-             (!('phone' in data) || (data.phone is string && data.phone.size() < 20)) &&
-             (!('email' in data) || isValidEmail(data.email)) &&
-             (!('address' in data) || (data.address is string && data.address.size() < 500)) &&
-             (!('createdAt' in data) || isValidDateString(data.createdAt)) &&
-             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+             (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() < 20)) &&
+             (!('email' in data) || data.email == null || isValidEmail(data.email)) &&
+             (!('address' in data) || data.address == null || (data.address is string && data.address.size() < 500)) &&
+             (!('createdAt' in data) || data.createdAt == null || isValidDateString(data.createdAt)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || isValidDateString(data.updatedAt));
     }
 
     function isValidDebtPayment(data) {
       return hasRequiredFields(['customerId', 'amount', 'method', 'timestamp']) &&
-             hasOnlyAllowedFields(['id', 'customerId', 'amount', 'method', 'timestamp', 'notes']) &&
+             hasOnlyAllowedFields(['id', 'customerId', 'amount', 'method', 'timestamp', 'notes', 'createdAt', 'updatedAt']) &&
              data.customerId is string && data.customerId.size() < 100 &&
              isPositive(data.amount) && data.amount > 0 &&
              data.method in ['cash', 'momo', 'card', 'Cash', 'Card', 'MTN Mobile Money'] &&
              isValidDateString(data.timestamp) &&
-             (!('notes' in data) || (data.notes is string && data.notes.size() < 500));
+             (!('notes' in data) || data.notes == null || (data.notes is string && data.notes.size() < 500)) &&
+             (!('createdAt' in data) || data.createdAt == null || isValidDateString(data.createdAt)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || isValidDateString(data.updatedAt));
     }
 
     function isValidMembership(data) {

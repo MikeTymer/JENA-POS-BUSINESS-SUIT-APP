@@ -89,29 +89,43 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         
-        unsubscribeUser = onSnapshot(userDocRef, async (docSnap) => {
-          if (docSnap.exists()) {
-            setUserProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
-          } else {
-            const newProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: firebaseUser.displayName,
-              photoURL: firebaseUser.photoURL,
-              phoneNumber: firebaseUser.phoneNumber,
-              plan: 'trial',
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(userDocRef, newProfile);
-            setUserProfile(newProfile as UserProfile);
+        const initializeUser = async () => {
+          try {
+            const docSnap = await getDoc(userDocRef);
+            if (!docSnap.exists()) {
+              const newProfile = {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL,
+                phoneNumber: firebaseUser.phoneNumber,
+                plan: 'trial',
+                createdAt: new Date().toISOString()
+              };
+              await setDoc(userDocRef, newProfile);
+            }
+          } catch (err) {
+            console.error("Failed to initialize user profile:", err);
           }
-          setIsAuthReady(true);
-          setLoading(false);
-        }, (error) => {
-          console.error("User profile snapshot error:", error);
-          setIsAuthReady(true);
-          setLoading(false);
-        });
+
+          // Start listener after initial check/creation
+          // Check if the user is still the same before subscribing
+          if (auth.currentUser?.uid === firebaseUser.uid) {
+            unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+              if (docSnap.exists()) {
+                setUserProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
+              }
+              setIsAuthReady(true);
+              setLoading(false);
+            }, (error) => {
+              console.error("User profile snapshot error:", error);
+              setIsAuthReady(true);
+              setLoading(false);
+            });
+          }
+        };
+
+        initializeUser();
       } else {
         setUserProfile(null);
         setIsAuthReady(true);
@@ -141,39 +155,46 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     // 2. Subscribe to memberships to get staff organizations
     const membershipsQuery = query(collection(db, 'memberships'), where('userId', '==', user.uid));
-    const unsubMemberships = onSnapshot(membershipsQuery, async (snapshot) => {
+    const unsubMemberships = onSnapshot(membershipsQuery, (snapshot) => {
       const ids = snapshot.docs.map(doc => doc.data().orgId as string);
       setStaffOrgIds(ids);
       
       // Ensure staff record exists for each membership
-      for (const d of snapshot.docs) {
+      snapshot.docs.forEach(async (d) => {
         const data = d.data();
         const staffDocRef = doc(db, `organizations/${data.orgId}/staff`, user.uid);
-        const staffSnap = await getDoc(staffDocRef);
-        
-        if (!staffSnap.exists()) {
-          console.log(`Creating missing staff record for org ${data.orgId}`);
-          await setDocument(`organizations/${data.orgId}/staff`, user.uid, {
-            id: user.uid,
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            role: data.role,
-            addedAt: new Date().toISOString()
-          });
+        try {
+          const staffSnap = await getDoc(staffDocRef);
+          
+          if (!staffSnap.exists()) {
+            console.log(`Creating missing staff record for org ${data.orgId}`);
+            await setDocument(`organizations/${data.orgId}/staff`, user.uid, {
+              id: user.uid,
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              role: data.role,
+              addedAt: new Date().toISOString()
+            });
+          }
+        } catch (err) {
+          console.error("Error ensuring staff record:", err);
         }
-      }
+      });
     });
 
     // 3. Check for unclaimed memberships
     const unclaimedQuery = query(collection(db, 'memberships'), where('email', '==', user.email), where('userId', '==', null));
-    const unsubUnclaimed = onSnapshot(unclaimedQuery, async (snapshot) => {
-      for (const d of snapshot.docs) {
+    const unsubUnclaimed = onSnapshot(unclaimedQuery, (snapshot) => {
+      snapshot.docs.forEach(async (d) => {
         const data = d.data();
         console.log(`Claiming membership for org ${data.orgId}`);
-        await updateDocument('memberships', d.id, { userId: user.uid });
-        // The membershipsQuery listener above will handle creating the staff record
-      }
+        try {
+          await updateDocument('memberships', d.id, { userId: user.uid });
+        } catch (err) {
+          console.error("Error claiming membership:", err);
+        }
+      });
     });
 
     return () => {
