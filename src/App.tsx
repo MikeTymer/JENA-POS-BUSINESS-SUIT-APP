@@ -7465,12 +7465,18 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'business' | 'profile' | 'security' | 'notifications' | 'billing' | 'affiliate'>(() => {
-    const saved = localStorage.getItem('settingsTab');
-    return (saved as any) || 'business';
+    try {
+      const saved = localStorage.getItem('settingsTab');
+      return (saved as any) || 'business';
+    } catch (e) {
+      return 'business';
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem('settingsTab', settingsTab);
+    try {
+      localStorage.setItem('settingsTab', settingsTab);
+    } catch (e) {}
   }, [settingsTab]);
   
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -7496,7 +7502,10 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         if (isExpiringSoon) {
           // Check if we already notified for this item's current status
           const notificationKey = `expiry_${item.id}_${item.expiryDate}`;
-          const lastNotified = localStorage.getItem(notificationKey);
+          let lastNotified = null;
+          try {
+            lastNotified = localStorage.getItem(notificationKey);
+          } catch (e) {}
           
           // Notify once every 7 days if still expiring soon/expired
           const sevenDaysAgo = new Date();
@@ -7518,7 +7527,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               createdAt: now.toISOString()
             });
             
-            localStorage.setItem(notificationKey, now.toISOString());
+            try {
+              localStorage.setItem(notificationKey, now.toISOString());
+            } catch (e) {}
           }
         }
       }
@@ -7613,7 +7624,11 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   // Track login
   useEffect(() => {
     if (userProfile && currentOrg) {
-      const lastLogin = sessionStorage.getItem(`last_login_${currentOrg.id}_${userProfile.uid}`);
+      let lastLogin = null;
+      try {
+        lastLogin = sessionStorage.getItem(`last_login_${currentOrg.id}_${userProfile.uid}`);
+      } catch (e) {}
+      
       if (!lastLogin) {
         createNotification(
           'login',
@@ -7621,7 +7636,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
           `${userProfile.displayName || userProfile.email} has logged into the system.`,
           { userId: userProfile.uid, email: userProfile.email }
         );
-        sessionStorage.setItem(`last_login_${currentOrg.id}_${userProfile.uid}`, new Date().toISOString());
+        try {
+          sessionStorage.setItem(`last_login_${currentOrg.id}_${userProfile.uid}`, new Date().toISOString());
+        } catch (e) {}
       }
     }
   }, [userProfile?.uid, currentOrg?.id]);
@@ -8014,7 +8031,10 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       
       // Check for referral code in URL
       const urlParams = new URLSearchParams(window.location.search);
-      const rawReferralCode = urlParams.get('ref') || localStorage.getItem('jena_pos_ref');
+      let rawReferralCode = urlParams.get('ref');
+      try {
+        rawReferralCode = rawReferralCode || localStorage.getItem('jena_pos_ref');
+      } catch (e) {}
       const referralCode = rawReferralCode?.trim().toUpperCase();
 
       const success = await setDocument('organizations', orgId, {
@@ -9502,8 +9522,16 @@ function AppContent() {
     console.log('AppContent mounted. URL Search:', window.location.search, 'Ref Code:', refCode);
     
     if (refCode) {
-      localStorage.setItem('jena_pos_ref', refCode);
-      if (!sessionStorage.getItem(`ref_tracked_${refCode}`)) {
+      try {
+        localStorage.setItem('jena_pos_ref', refCode);
+      } catch (e) {}
+      
+      let isTracked = false;
+      try {
+        isTracked = !!sessionStorage.getItem(`ref_tracked_${refCode}`);
+      } catch (e) {}
+
+      if (!isTracked) {
         console.log('Affiliate link detected with code:', refCode);
         const trackClick = async () => {
           try {
@@ -9517,7 +9545,9 @@ function AppContent() {
               await updateDocument('affiliates', affiliateDoc.id, {
                 totalClicks: currentClicks + 1
               });
-              sessionStorage.setItem(`ref_tracked_${refCode}`, 'true');
+              try {
+                sessionStorage.setItem(`ref_tracked_${refCode}`, 'true');
+              } catch (e) {}
               console.log('Click tracked successfully!');
             } else {
               console.warn('Affiliate not found for code:', normalizedCode);
@@ -9531,8 +9561,10 @@ function AppContent() {
     }
   }, []);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('jena-pos-theme');
-    if (saved === 'light' || saved === 'dark') return saved;
+    try {
+      const saved = localStorage.getItem('jena-pos-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch (e) {}
     
     // Detect system preference
     if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -9542,7 +9574,9 @@ function AppContent() {
   });
 
   useEffect(() => {
-    localStorage.setItem('jena-pos-theme', theme);
+    try {
+      localStorage.setItem('jena-pos-theme', theme);
+    } catch (e) {}
     if (theme === 'light') {
       document.documentElement.classList.add('light');
       document.documentElement.classList.remove('dark');
