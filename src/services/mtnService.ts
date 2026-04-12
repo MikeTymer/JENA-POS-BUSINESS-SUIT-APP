@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 import { v4 as uuidv4 } from 'uuid';
-import { auth } from '../firebase';
 
 class MTNMoMoService {
   private token: string | null = null;
@@ -8,22 +7,15 @@ class MTNMoMoService {
 
   constructor() {}
 
-  private async getAuthHeader(): Promise<Record<string, string>> {
-    const idToken = await auth.currentUser?.getIdToken();
-    return idToken ? { 'Authorization': `Bearer ${idToken}` } : {};
-  }
-
   private async getAccessToken(): Promise<string> {
     if (this.token && Date.now() < this.tokenExpiry) {
       return this.token;
     }
 
-    const authHeader = await this.getAuthHeader();
     const response = await fetch('/api/momo/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeader,
       },
     });
 
@@ -42,12 +34,10 @@ class MTNMoMoService {
   }
 
   async requestToPay(amount: number, currency: string, phoneNumber: string, externalId: string): Promise<string> {
-    const authHeader = await this.getAuthHeader();
     const response = await fetch('/api/momo/requesttopay', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeader,
       },
       body: JSON.stringify({
         body: {
@@ -77,12 +67,8 @@ class MTNMoMoService {
   }
 
   async getTransactionStatus(referenceId: string): Promise<'SUCCESSFUL' | 'FAILED' | 'PENDING'> {
-    const authHeader = await this.getAuthHeader();
     const response = await fetch(`/api/momo/status/${referenceId}`, {
       method: 'GET',
-      headers: {
-        ...authHeader,
-      },
     });
 
     if (!response.ok) {
@@ -98,12 +84,10 @@ class MTNMoMoService {
   }
 
   async transfer(amount: number, currency: string, phoneNumber: string, externalId: string): Promise<string> {
-    const authHeader = await this.getAuthHeader();
     const response = await fetch('/api/momo/transfer', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeader,
       },
       body: JSON.stringify({
         body: {

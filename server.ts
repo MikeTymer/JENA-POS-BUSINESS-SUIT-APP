@@ -4,86 +4,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
-import fs from 'fs';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load Firebase Config for API Key
-const firebaseConfigPath = path.join(__dirname, 'firebase-applet-config.json');
-let firebaseApiKey = '';
-if (fs.existsSync(firebaseConfigPath)) {
-  try {
-    const config = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf8'));
-    firebaseApiKey = config.apiKey;
-  } catch (err) {
-    console.error('Error reading firebase-applet-config.json:', err);
-  }
-}
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Security Headers
-  app.use(helmet({
-    contentSecurityPolicy: false, // Vite needs this disabled or configured for dev
-    crossOriginEmbedderPolicy: false,
-  }));
-
   app.use(express.json());
-
-  // Rate Limiting
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-
-  // Apply rate limiter to all API routes
-  app.use('/api/', limiter);
-
-  // Authentication Middleware
-  const verifyFirebaseToken = async (req: any, res: any, next: any) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized: No token provided' });
-    }
-
-    const idToken = authHeader.split('Bearer ')[1];
-    try {
-      if (!firebaseApiKey) {
-        console.error('Firebase API Key missing for token verification');
-        return res.status(500).json({ error: 'Internal server error: Auth configuration missing' });
-      }
-
-      // Verify token using Firebase Auth REST API (no service account needed)
-      const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        console.error('Firebase Token Verification Failed:', errData);
-        return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-      }
-
-      const data = await response.json();
-      req.user = data.users[0];
-      next();
-    } catch (error) {
-      console.error('Token verification error:', error);
-      res.status(500).json({ error: 'Internal server error during authentication' });
-    }
-  };
 
   // Helper to fix common URL mistakes
   const getCorrectMomoUrl = (baseUrl: string, path: string): string => {
@@ -103,8 +34,8 @@ async function startServer() {
   };
 
   // MTN MoMo Proxy Endpoints
-  // Protected by verifyFirebaseToken
-  app.post('/api/momo/token', verifyFirebaseToken, async (req, res) => {
+  // This avoids CORS issues by making the request from the server
+  app.post('/api/momo/token', async (req, res) => {
     try {
       const baseUrl = process.env.MTN_MOMO_API_BASE_URL || 'https://momoapi.mtn.com';
       const userId = process.env.MTN_MOMO_USER_ID || '';
@@ -151,7 +82,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/momo/requesttopay', verifyFirebaseToken, async (req, res) => {
+  app.post('/api/momo/requesttopay', async (req, res) => {
     try {
       const { body } = req.body;
       const baseUrl = process.env.MTN_MOMO_API_BASE_URL || 'https://momoapi.mtn.com';
@@ -211,7 +142,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/momo/status/:referenceId', verifyFirebaseToken, async (req, res) => {
+  app.get('/api/momo/status/:referenceId', async (req, res) => {
     try {
       const { referenceId } = req.params;
       const baseUrl = process.env.MTN_MOMO_API_BASE_URL || 'https://momoapi.mtn.com';
@@ -254,7 +185,7 @@ async function startServer() {
   });
 
   // Disbursement Endpoints for Affiliate Transfers
-  app.post('/api/momo/disburse/token', verifyFirebaseToken, async (req, res) => {
+  app.post('/api/momo/disburse/token', async (req, res) => {
     try {
       const baseUrl = process.env.MTN_MOMO_API_BASE_URL || 'https://momoapi.mtn.com';
       const userId = process.env.MTN_MOMO_DISBURSE_USER_ID || process.env.MTN_MOMO_USER_ID || '';
@@ -288,7 +219,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/momo/transfer', verifyFirebaseToken, async (req, res) => {
+  app.post('/api/momo/transfer', async (req, res) => {
     try {
       const { body } = req.body;
       const baseUrl = process.env.MTN_MOMO_API_BASE_URL || 'https://momoapi.mtn.com';
