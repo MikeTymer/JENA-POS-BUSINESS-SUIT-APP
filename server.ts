@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
 
@@ -15,6 +16,65 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Email Transporter Setup
+  const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: process.env.EMAIL_PORT === '465',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  // Welcome Email Endpoint
+  app.post('/api/email/welcome', async (req, res) => {
+    const { email, businessName, businessId, loginUrl } = req.body;
+
+    if (!email || !businessName) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || '"JENA POS" <noreply@jena-pos.com>',
+      to: email,
+      subject: `Welcome to JENA POS - ${businessName} Created!`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; rounded: 12px;">
+          <h2 style="color: #4f46e5;">Welcome to JENA POS!</h2>
+          <p>Hello,</p>
+          <p>Thank you for joining JENA POS. We are excited to help you manage your business more efficiently.</p>
+          <p>Your business <strong>${businessName}</strong> (ID: ${businessId}) has been successfully created and is ready for use.</p>
+          <div style="margin: 30px 0;">
+            <a href="${loginUrl}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Login to Your Dashboard</a>
+          </div>
+          <p>If the button above doesn't work, copy and paste this link into your browser:</p>
+          <p>${loginUrl}</p>
+          <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+          <p style="font-size: 12px; color: #6b7280;">This is an automated message. Please do not reply to this email.</p>
+        </div>
+      `,
+    };
+
+    try {
+      // If no SMTP config, just log it (useful for preview/dev)
+      if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER) {
+        console.log('--- MOCK EMAIL SENT ---');
+        console.log('To:', email);
+        console.log('Subject:', mailOptions.subject);
+        console.log('Body:', mailOptions.html);
+        console.log('-----------------------');
+        return res.json({ success: true, message: 'Email logged to console (no SMTP config)' });
+      }
+
+      await transporter.sendMail(mailOptions);
+      res.json({ success: true, message: 'Welcome email sent successfully' });
+    } catch (error: any) {
+      console.error('Error sending welcome email:', error);
+      res.status(500).json({ error: 'Failed to send email', details: error.message });
+    }
+  });
 
   // Helper to fix common URL mistakes
   const getCorrectMomoUrl = (baseUrl: string, path: string): string => {

@@ -2979,7 +2979,7 @@ function Inventory({ showNotification, createNotification, permissions, highligh
 
   const downloadStockPDF = () => {
     const doc = new jsPDF();
-    const totalValue = filteredItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    const totalValue = filteredItems.reduce((sum, item) => sum + (item.quantity * item.cost), 0);
     
     doc.setFontSize(18);
     doc.text('Inventory Stock Report', 14, 22);
@@ -2987,21 +2987,21 @@ function Inventory({ showNotification, createNotification, permissions, highligh
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
-    doc.text(`Total Stock Value: ${formatCurrency(totalValue, currentOrg?.currency)}`, 14, 37);
+    doc.text(`Total Stock Value (at Cost): ${formatCurrency(totalValue, currentOrg?.currency)}`, 14, 37);
 
     const tableData = filteredItems.map(item => [
       item.name,
       item.sku,
       item.category,
       item.quantity.toString(),
-      formatCurrency(item.price, currentOrg?.currency),
-      formatCurrency(item.quantity * item.price, currentOrg?.currency),
+      formatCurrency(item.cost, currentOrg?.currency),
+      formatCurrency(item.quantity * item.cost, currentOrg?.currency),
       item.quantity === 0 ? 'Out of Stock' : item.quantity <= 10 ? 'Low Stock' : 'Good'
     ]);
 
     autoTable(doc, {
       startY: 45,
-      head: [['Product', 'SKU', 'Category', 'Stock', 'Price', 'Value', 'Status']],
+      head: [['Product', 'SKU', 'Category', 'Stock', 'Cost Price', 'Total Cost Value', 'Status']],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [79, 70, 229] }
@@ -3287,7 +3287,10 @@ function Inventory({ showNotification, createNotification, permissions, highligh
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Batch/Expiry</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Status</th>
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Stock</th>
-              <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Price</th>
+              <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Selling Price</th>
+              {permissions.canManageInventory && (
+                <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Cost Price</th>
+              )}
               <th className="px-6 py-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -3356,6 +3359,9 @@ function Inventory({ showNotification, createNotification, permissions, highligh
                     <span className="font-mono">{item.quantity}</span>
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-zinc-100">{formatCurrency(item.price, currentOrg?.currency)}</td>
+                  {permissions.canManageInventory && (
+                    <td className="px-6 py-4 text-sm font-medium text-emerald-500">{formatCurrency(item.cost, currentOrg?.currency)}</td>
+                  )}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       {permissions.canManageInventory && (
@@ -3379,7 +3385,7 @@ function Inventory({ showNotification, createNotification, permissions, highligh
             })}
             {filteredItems.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                <td colSpan={permissions.canManageInventory ? 8 : 7} className="px-6 py-12 text-center text-zinc-500">
                   No products found matching your filters.
                 </td>
               </tr>
@@ -7459,6 +7465,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   const [showHelpReminder, setShowHelpReminder] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCreatingOrg, setIsCreatingOrg] = useState(false);
+  const [isProcessingOrg, setIsProcessingOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgType, setNewOrgType] = useState<'general' | 'medical'>('general');
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
@@ -8004,7 +8011,16 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   };
 
   const handleCreateOrg = async () => {
-    if (!user || !userProfile || !newOrgName.trim()) return;
+    if (!user || !userProfile || !newOrgName.trim() || isProcessingOrg) return;
+    
+    // Check for unique name
+    const nameExists = organizations.some(o => o.name.toLowerCase() === newOrgName.trim().toLowerCase() && o.ownerUid === user.uid);
+    if (nameExists) {
+      showNotification('An organization with this name already exists. Please choose a unique name.', 'error');
+      return;
+    }
+
+    setIsProcessingOrg(true);
     
     // Check limits
     const ownedOrgs = organizations.filter(o => o.ownerUid === user.uid);
@@ -8012,6 +8028,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
     const limit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS].orgs;
     
     if (ownedOrgs.length >= limit) {
+      setIsProcessingOrg(false);
       if (plan === 'trial') {
         showNotification(`You have reached the limit of 1 free business profile. Please upgrade to a monthly subscription for more shops.`, 'error');
       } else {
@@ -8020,7 +8037,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       return;
     }
 
-    const orgId = Math.random().toString(36).substring(7);
+    const orgId = Math.random().toString(36).substring(7).toUpperCase(); // Make ID uppercase and slightly more readable
     try {
       const isFirstOrg = ownedOrgs.length === 0;
       
@@ -8037,9 +8054,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       } catch (e) {}
       const referralCode = rawReferralCode?.trim().toUpperCase();
 
-      const success = await setDocument('organizations', orgId, {
+      const newOrgData = {
         id: orgId,
-        name: newOrgName,
+        name: newOrgName.trim(),
         ownerUid: user.uid,
         country: 'US',
         currency: 'USD',
@@ -8053,7 +8070,9 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         businessType: newOrgType,
         createdAt: new Date().toISOString(),
         ...(expiresAt && { expiresAt })
-      });
+      };
+
+      const success = await setDocument('organizations', orgId, newOrgData);
 
       if (success) {
         // Add owner as admin staff member
@@ -8064,9 +8083,26 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
           role: 'director',
           createdAt: new Date().toISOString()
         });
+
+        // Send welcome email via server
+        try {
+          await fetch('/api/email/welcome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: user.email,
+              businessName: newOrgName.trim(),
+              businessId: orgId,
+              loginUrl: window.location.origin
+            })
+          });
+        } catch (e) {
+          console.error('Failed to send welcome email:', e);
+        }
       }
 
       if (success && referralCode) {
+        // ... (referral logic remains same)
         // Create referral record
         const referralId = Math.random().toString(36).substring(7);
         
@@ -8113,6 +8149,8 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       if (success) {
         setIsCreatingOrg(false);
         setNewOrgName('');
+        // Immediately set current org to the new one
+        setCurrentOrg(newOrgData as any);
         showNotification('Organization created successfully!');
       } else {
         showNotification('Failed to create organization. Please check your permissions.', 'error');
@@ -8121,6 +8159,8 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       console.error('Error in handleCreateOrg:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       showNotification(`Error: ${errorMessage}`, 'error');
+    } finally {
+      setIsProcessingOrg(false);
     }
   };
 
@@ -8274,8 +8314,16 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             >Cancel</button>
             <button 
               onClick={handleCreateOrg}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors"
-            >Create</button>
+              disabled={isProcessingOrg || !newOrgName.trim()}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isProcessingOrg ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Creating...
+                </>
+              ) : 'Create'}
+            </button>
           </div>
         </div>
       </div>
