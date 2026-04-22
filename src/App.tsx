@@ -45,6 +45,7 @@ import {
   ShieldCheck,
   FileText,
   Download,
+  ShieldPlus,
   Filter,
   RotateCcw,
   RefreshCw,
@@ -795,16 +796,16 @@ Use Markdown for tables, bold text, and bullet points. Be professional and encou
       console.error("AI Analysis error:", error);
       
       // User request: Show "Coming Soon" instead of raw errors while quota/API stabilizes
-      const comingSoonMsg = `### 🚀 JENA AI Analyst: Coming Soon
+      const comingSoonMsg = `### 🚀 JENA AI Analyst: Your Silicon Strategist
 
-I am currently optimizing my intelligence patterns to better analyze your specific business data. 
+Experience the competitive edge of enterprise-grade predictive analysis. I am currently optimizing my intelligence patterns to better analyze your specific business data. 
 
 **What you can expect shortly:**
-*   **Deep Financial Audits**: Automatic detection of profit leaks.
-*   **Smart Restocking**: AI-powered inventory forecasting.
-*   **Growth Triggers**: Personalized recommendations to scale your business.
+*   **Deep Financial Audits**: I'll automatically detect profit leaks and unnecessary overhead before they impact your yearly growth.
+*   **Smart Restocking**: Use AI-powered inventory forecasting based on historical sales velocity so you never miss a sale.
+*   **Growth Triggers**: Get personalized recommendations to scale your business based on market trends.
 
-We are currently syncing with live network nodes. Detailed insights will be available once the synchronization is complete. Thank you for your patience!`;
+We are currently syncing with live network nodes. Your future-ready business analyst will be ready shortly. Thank you for your patience!`;
       
       setMessages(prev => [...prev, { role: 'assistant', content: comingSoonMsg }]);
     } finally {
@@ -828,8 +829,8 @@ We are currently syncing with live network nodes. Detailed insights will be avai
       
       <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-50">
-            <div className="p-6 bg-zinc-800/50 rounded-full">
+          <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
+            <div className="p-6 bg-indigo-500/10 rounded-full">
               <BarChart3 className="w-12 h-12 text-indigo-400" />
             </div>
             <div className="max-w-sm">
@@ -848,7 +849,9 @@ We are currently syncing with live network nodes. Detailed insights will be avai
               "px-4 py-3 rounded-2xl text-sm leading-relaxed",
               m.role === 'user' 
                 ? "bg-indigo-600 text-white rounded-tr-none" 
-                : "bg-zinc-800 text-zinc-100 border border-zinc-700 rounded-tl-none pr-6 sm:pr-8"
+                : m.content.includes("Coming Soon")
+                  ? "bg-blue-900/30 text-zinc-100 border border-blue-500/40 rounded-tl-none shadow-lg shadow-blue-500/10 pr-6 sm:pr-8 w-full"
+                  : "bg-zinc-800 text-zinc-100 border border-zinc-700 rounded-tl-none pr-6 sm:pr-8"
             )}>
               {m.role === 'assistant' ? (
                 <div className="markdown-body prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-700">
@@ -6275,6 +6278,77 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     const affDesc = "Scale your ecosystem by rewarding partners. The affiliate system tracks referrals, generates unique links, and offers a dashboard for performance tracking and commission management.";
     doc.text(doc.splitTextToSize(affDesc, 170), 20, 55);
 
+    // Page 7: Operations & Financial Guide
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.text('6. Operations & Financial Guide', 20, 40);
+    
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Professional Financial Reporting (GAAP/IFRS)', 20, 55);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const updateText = "JENA POS follows international accounting standards. You have access to professional Income Statements, Balance Sheets, and Cash Flow tracking.";
+    doc.text(doc.splitTextToSize(updateText, 170), 20, 62);
+
+    const guideModules = [
+      {
+        title: "Financial Statements",
+        details: "• Income Statement: Revenue, COGS, and Net Profit\n• Balance Sheet: Assets, Liabilities, and Equity\n• Cash Flow: Monitor actual cash movement"
+      },
+      {
+        title: "Credit Handling & Customer Tracking",
+        details: "• Track customer debts and credit limits in real-time\n• Automated payment reminders via shareable links\n• Historical credit behavior analysis for risk management"
+      },
+      {
+        title: "Medical & Specialized Tracking",
+        details: "• 'Medical' mode for Pharmacies and Clinics\n• Specialized fields for batch numbers, expiry, and patient records\n• Industry-standard compliance for medical inventory"
+      },
+      {
+        title: "Staff & Remote Management",
+        details: "• Admin, Manager, and Cashier roles with specific privileges\n• Real-time synchronization across different global locations\n• Monitor branch performance from a single central dashboard"
+      }
+    ];
+
+    let currentY = 85;
+    guideModules.forEach((m) => {
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(m.title, 20, currentY);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const details = doc.splitTextToSize(m.details, 160);
+      doc.text(details, 25, currentY + 6);
+      currentY += 30;
+    });
+
+    // Page 8: Advanced AI & Analysis
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.text('7. JENA AI: Your Silicon Partner', 20, 40);
+    doc.setFontSize(11);
+    const aiPitch = "Unlock the power of predictive intelligence. JENA AI isn't just a reporter; it's a strategist that lives inside your business. Experience the competitive edge of enterprise-grade analysis at your fingertips.";
+    doc.text(doc.splitTextToSize(aiPitch, 170), 20, 55);
+
+    const aiFeatures = [
+      { t: "Deep Financial Audits", d: "Instantly locate hidden profit leaks and unnecessary overhead before they impact your yearly growth." },
+      { t: "Smart Restocking", d: "Predictive inventory forecasting using historical sales velocity to ensure you never miss a sale or over-order." },
+      { t: "Growth Triggers", d: "Automated identification of scaling opportunities based on real-time market trends and product performance." }
+    ];
+
+    let aiY = 80;
+    aiFeatures.forEach(f => {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text(f.t, 20, aiY);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.text(doc.splitTextToSize(f.d, 170), 20, aiY + 7);
+      aiY += 25;
+    });
+
     // Final Page
     doc.addPage();
     doc.setFillColor(textColor[0], textColor[1], textColor[2]);
@@ -6288,7 +6362,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-10 space-y-12 overflow-hidden relative">
+    <div className="bg-blue-950/20 border border-blue-500/30 rounded-[2.5rem] p-10 space-y-12 overflow-hidden relative shadow-2xl shadow-blue-500/5">
       <div className="absolute top-0 right-0 p-8 opacity-5">
         <Sparkles className="w-64 h-64 text-indigo-500" />
       </div>
@@ -6314,7 +6388,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
           { title: "AI Analytics", icon: BrainCircuit, desc: "Business intelligence via Google Gemini.", img: null },
           { title: "Inventory", icon: PackageCheck, desc: "Scan, track, and optimize stock levels.", img: "/inventory-screenshot.png" }
         ].map((item, idx) => (
-          <div key={idx} className="group bg-zinc-950 border border-zinc-800/50 rounded-3xl overflow-hidden hover:border-indigo-500/50 transition-all">
+          <div key={idx} className="group bg-blue-900/5 border border-blue-500/20 rounded-3xl overflow-hidden hover:border-blue-500/50 transition-all">
             <div className="h-48 overflow-hidden grayscale group-hover:grayscale-0 transition-all flex items-center justify-center bg-zinc-900">
               {item.img ? (
                 <img src={item.img} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
@@ -6478,13 +6552,43 @@ function HelpSection() {
           ]}
         />
         <HelpCard 
-          title="Inventory & POS" 
-          description="Efficient sales processing and robust stock control."
+          title="Credit & Customer Debt" 
+          description="Manage customer receivables with automated tracking and reminders."
           steps={[
-            "POS: Quick search and multi-item checkout",
-            "Inventory: Low-stock alerts and cost tracking",
-            "Receipts: Automatic generation for every transaction",
-            "Categories: Organize products for better reporting"
+            "Customer Profiles: Track lifetime value and debt history",
+            "Credit Limits: Prevent over-extension of customer credit",
+            "Reminders: Share payment links directly from the POS",
+            "History: Audit every payment made towards a debt"
+          ]}
+        />
+        <HelpCard 
+          title="Medical Pharmacies" 
+          description="Specialized tools for pharmacies and medical clinics."
+          steps={[
+            "Registration: Select 'Medical' type during business setup",
+            "Inventory: Track Batch Numbers and Expiry Dates",
+            "POS: Professional patient record management",
+            "Compliance: Proper accounting for medical-grade stock"
+          ]}
+        />
+        <HelpCard 
+          title="Branch Management" 
+          description="Scale your business across multiple locations seamlessly."
+          steps={[
+            "Global Sync: Real-time cloud access for all branches",
+            "Multi-User: Dedicated Admin, Manager, and Cashier roles",
+            "Remote Monitor: Check sales from anywhere in the world",
+            "Privileges: Restricted access based on staff seniority"
+          ]}
+        />
+        <HelpCard 
+          title="JENA AI Service" 
+          description="The futuristic brain of your retail enterprise."
+          steps={[
+            "Financial Audit: Let AI find leaks and reduce overhead",
+            "Smart Restock: Velocity-based inventory forecasting",
+            "Growth Advice: Personalized scaling strategies",
+            "Natural Language: Just ask questions about your data"
           ]}
         />
       </div>
@@ -8886,18 +8990,27 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none" 
             />
           </div>
-          <div className="flex items-center gap-3 p-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/50">
-            <input 
-              type="checkbox" 
-              id="medical-type"
-              checked={newOrgType === 'medical'}
-              onChange={(e) => setNewOrgType(e.target.checked ? 'medical' : 'general')}
-              className="w-5 h-5 rounded border-zinc-700 bg-zinc-800 text-indigo-600 focus:ring-indigo-500"
-            />
-            <label htmlFor="medical-type" className="text-sm font-medium text-zinc-300 cursor-pointer">
-              Medical Pharmacy / Clinic
-              <p className="text-[10px] text-zinc-500 font-normal">Enable medical-specific inventory fields and POS patient tracking</p>
-            </label>
+          <div className="flex items-start gap-4 p-5 bg-blue-600/10 rounded-2xl border border-blue-500/30 group cursor-pointer transition-all hover:bg-blue-600/20 shadow-lg shadow-blue-500/5" onClick={() => setNewOrgType(newOrgType === 'medical' ? 'general' : 'medical')}>
+            <div className="pt-1">
+              <input 
+                type="checkbox" 
+                id="medical-type"
+                checked={newOrgType === 'medical'}
+                onChange={() => {}} // Handled by div click
+                className="w-6 h-6 rounded-lg border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-blue-500 cursor-pointer transition-transform group-active:scale-90"
+              />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <ShieldPlus className="w-5 h-5 text-blue-400" />
+                <label className="text-base font-black text-zinc-100 cursor-pointer">
+                  Medical Pharmacy / Clinic
+                </label>
+              </div>
+              <p className="text-xs text-zinc-400 leading-relaxed mt-1">
+                Enable specialized inventory tracking for batch numbers, expiry dates, and patient-linked sales records.
+              </p>
+            </div>
           </div>
           <div className="flex gap-3">
             <button 
@@ -10090,7 +10203,7 @@ function AuthScreen() {
             <button 
               onClick={() => handleLogin()}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-zinc-100 text-zinc-950 font-bold py-4 rounded-2xl transition-all shadow-xl disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-500/20 disabled:opacity-50"
             >
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                 <>
