@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { GoogleGenAI } from "@google/genai";
 import { mtnMoMoService } from './services/mtnService';
 import { 
   signInWithPopup, 
@@ -55,6 +58,10 @@ import {
   History,
   HelpCircle,
   Printer,
+  BrainCircuit,
+  Calculator,
+  PackageCheck,
+  CheckCircle2,
   MapPin,
   Hash,
   Bell,
@@ -104,7 +111,7 @@ import {
   updateDocument,
   setDocument
 } from './lib/firestore';
-import { where, doc, getDoc, getDocs, collection, query, onSnapshot, increment, updateDoc } from 'firebase/firestore';
+import { where, doc, getDoc, getDocs, collection, query, onSnapshot, increment, updateDoc, deleteDoc } from 'firebase/firestore';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -704,13 +711,200 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
 
 // --- Admin Panel Component ---
 
+function AIInsights({ financialData, inventory, currentOrg }: { financialData: any, inventory: any[], currentOrg: any }) {
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const userMessage = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setIsLoading(true);
+
+    try {
+      let apiKey = process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY;
+      if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey.trim() === "") {
+        throw new Error("Gemini API Key is missing. Please set your valid API key as GEMINI_API_KEY_1 in the Secrets panel.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+      
+      const systemPrompt = `You are a professional business analyst for JENA POS, an advanced point-of-sale and financial management system. 
+Your goal is to help the business owner make better decisions using their data.
+You have access to the business data provided below. Analyze it and provide concise, actionable, and strategic insights.
+
+Business Context:
+- Organization Name: ${currentOrg?.name}
+- Currency: ${currentOrg?.currency || 'USD'}
+
+Current Period Summary:
+- Revenue: ${financialData.incomeStatement.revenue}
+- COGS: ${financialData.incomeStatement.cogs}
+- Gross Profit: ${financialData.incomeStatement.grossProfit}
+- Net Income: ${financialData.incomeStatement.netIncome}
+- Operating Margin: ${financialData.incomeStatement.revenue > 0 ? (financialData.incomeStatement.operatingIncome / financialData.incomeStatement.revenue * 100).toFixed(2) : 0}%
+
+Assets:
+- Cash Balance: ${financialData.balanceSheet.assets.current.cash}
+- Inventory Value: ${financialData.balanceSheet.assets.current.inventory}
+
+Inventory Details:
+- Total unique products: ${inventory.length}
+- Low stock items: ${inventory.filter((i: any) => i.quantity <= 10).length}
+- Out of stock: ${inventory.filter((i: any) => i.quantity <= 0).length}
+
+Expense Analysis:
+- Top expense categories: ${JSON.stringify(financialData.incomeStatement.expenseByCategory)}
+
+Provide insights on:
+1. Financial health and profitability trends.
+2. Inventory optimization (dead stock vs fast moving).
+3. Expense management.
+4. Strategic recommendations for growth.
+
+Use Markdown for tables, bold text, and bullet points. Be professional and encouraging.`;
+
+      // Switching to a high-capacity model to avoid "high demand" errors on preview models
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [
+           ...messages.map(m => ({ 
+             role: m.role === 'user' ? 'user' : 'model', 
+             parts: [{ text: m.content }] 
+           })),
+           { role: 'user', parts: [{ text: userMessage }] }
+        ],
+        config: {
+          systemInstruction: systemPrompt,
+        }
+      });
+
+      const aiText = response.text || "I couldn't analyze the data at this moment.";
+      setMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
+    } catch (error: any) {
+      console.error("AI Analysis error:", error);
+      
+      // User request: Show "Coming Soon" instead of raw errors while quota/API stabilizes
+      const comingSoonMsg = `### 🚀 JENA AI Analyst: Coming Soon
+
+I am currently optimizing my intelligence patterns to better analyze your specific business data. 
+
+**What you can expect shortly:**
+*   **Deep Financial Audits**: Automatic detection of profit leaks.
+*   **Smart Restocking**: AI-powered inventory forecasting.
+*   **Growth Triggers**: Personalized recommendations to scale your business.
+
+We are currently syncing with live network nodes. Detailed insights will be available once the synchronization is complete. Thank you for your patience!`;
+      
+      setMessages(prev => [...prev, { role: 'assistant', content: comingSoonMsg }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col h-[700px]">
+      <div className="p-6 border-b border-zinc-800 bg-zinc-800/30 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="bg-indigo-500/20 p-2 rounded-xl">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-zinc-100">AI Business Analyst</h3>
+            <p className="text-zinc-500 text-xs tracking-wide uppercase font-bold">Ask anything about your business performance</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
+        {messages.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-50">
+            <div className="p-6 bg-zinc-800/50 rounded-full">
+              <BarChart3 className="w-12 h-12 text-indigo-400" />
+            </div>
+            <div className="max-w-sm">
+              <p className="text-zinc-100 font-bold">Hello! I'm your JENA AI Analyst.</p>
+              <p className="text-sm text-zinc-400">Ask me things like "How is my profit margin?", "Which products are performing best?", or "How can I reduce my expenses?"</p>
+            </div>
+          </div>
+        )}
+        
+        {messages.map((m, i) => (
+          <div key={i} className={cn(
+            "flex flex-col max-w-[85%] space-y-2",
+            m.role === 'user' ? "ml-auto items-end" : "mr-auto items-start"
+          )}>
+            <div className={cn(
+              "px-4 py-3 rounded-2xl text-sm leading-relaxed",
+              m.role === 'user' 
+                ? "bg-indigo-600 text-white rounded-tr-none" 
+                : "bg-zinc-800 text-zinc-100 border border-zinc-700 rounded-tl-none pr-6 sm:pr-8"
+            )}>
+              {m.role === 'assistant' ? (
+                <div className="markdown-body prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-700">
+                  <Markdown remarkPlugins={[remarkGfm]}>{m.content}</Markdown>
+                </div>
+              ) : (
+                m.content
+              )}
+            </div>
+            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-1">
+              {m.role === 'user' ? 'You' : 'JENA AI'}
+            </span>
+          </div>
+        ))}
+        
+        {isLoading && (
+          <div className="flex items-center gap-3 text-zinc-400 animate-pulse">
+            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+            <span className="text-xs font-bold uppercase tracking-widest">Analyzing your data...</span>
+          </div>
+        )}
+      </div>
+      
+      <div className="p-6 border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-xl">
+        <div className="relative flex items-center">
+          <input 
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder="Ask your AI analyst a question..."
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-4 text-zinc-200 text-sm focus:outline-none focus:border-indigo-500 transition-all pr-16"
+          />
+          <button 
+            onClick={handleSend}
+            disabled={!input.trim() || isLoading}
+            className="absolute right-3 p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all disabled:opacity-50 disabled:grayscale"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </div>
+        <p className="mt-3 text-[10px] text-zinc-600 text-center font-medium italic">
+          AI generated insights should be used as professional guidance alongside your official records.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function Reports({ permissions }: { permissions: any }) {
   const { currentOrg } = useFirebase();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [damages, setDamages] = useState<DamageRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'balance_sheet' | 'income_statement' | 'cash_flow' | 'equity_statement'>('overview');
-  const [reportHistory, setReportHistory] = useState<string[]>(['overview']);
+  const [activeTab, setActiveTab] = useState<'overview' | 'balance_sheet' | 'income_statement' | 'cash_flow' | 'equity_statement' | 'ai_insights'>('ai_insights');
+  const [reportHistory, setReportHistory] = useState<string[]>(['ai_insights']);
 
   useEffect(() => {
     setReportHistory(prev => {
@@ -1058,6 +1252,7 @@ function Reports({ permissions }: { permissions: any }) {
       {/* Tabs */}
       <div className="flex border-b border-zinc-800 overflow-x-auto no-scrollbar">
         {[
+          { id: 'ai_insights', label: 'AI Intelligence', icon: Sparkles },
           { id: 'overview', label: 'Overview', icon: LayoutDashboard },
           { id: 'income_statement', label: 'Income Statement', icon: TrendingUp },
           { id: 'balance_sheet', label: 'Balance Sheet', icon: Building2 },
@@ -1482,6 +1677,10 @@ function Reports({ permissions }: { permissions: any }) {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'ai_insights' && (
+          <AIInsights financialData={financialData} inventory={inventory} currentOrg={currentOrg} />
         )}
       </div>
     </div>
@@ -5929,10 +6128,256 @@ function HelpCard({ title, description, steps }: { title: string, description: s
   );
 }
 
+function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
+  const downloadSystemDoc = async () => {
+    const doc = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4',
+      putOnlyUsedFonts: true
+    });
+
+    const primaryColor = [79, 70, 229]; // Indigo-600
+    const textColor = [24, 24, 27]; // Zinc-900
+
+    const loadImage = (url: string): Promise<string | null> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          } else {
+            resolve(null);
+          }
+        };
+        img.onerror = () => resolve(null);
+        img.src = url;
+      });
+    };
+
+    // Pre-load images
+    const posImg = await loadImage('/smart-pos-screenshot.png');
+    const invImg = await loadImage('/inventory-screenshot.png');
+
+    // Title Page
+    doc.setFillColor(textColor[0], textColor[1], textColor[2]);
+    doc.rect(0, 0, 210, 297, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(48);
+    doc.setFont('helvetica', 'bold');
+    doc.text('JENA POS', 20, 80);
+    
+    doc.setFontSize(18);
+    doc.text('System Operations Manual & Overview', 20, 100);
+    
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(20, 110, 40, 2, 'F');
+    
+    doc.setFontSize(12);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`Generated for: ${currentOrg?.name || 'Valued Partner'}`, 20, 260);
+    doc.text(`Version: 2.4.0 • ${new Date().toLocaleDateString()}`, 20, 270);
+
+    // Page 2: Table of Contents & Core Vision
+    doc.addPage();
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.setFontSize(24);
+    doc.text('1. Core Vision', 20, 40);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const introText = "JENA POS is designed by Micheal Sakwa to democratize professional business tools. Our mission is to empower entrepreneurs with robust financial accuracy and modern UI experiences that simplify complex operations.";
+    const splitIntro = doc.splitTextToSize(introText, 170);
+    doc.text(splitIntro, 20, 55);
+
+    doc.setFontSize(18);
+    doc.text('Platform Functions:', 20, 85);
+    const functions = [
+      '• Smart Point of Sale (POS): High-speed checkout & reminders.',
+      '• Inventory Pro: Real-time stock tracking & alerts.',
+      '• Financial Fortress: Enterprise-grade reporting.',
+      '• JENA AI Intelligence: Natural Language business analysis.',
+      '• Damage & Loss Control: Digital recording for accountability.',
+      '• Affiliate Engine: Scalable growth through referrals.'
+    ];
+    functions.forEach((f, i) => doc.text(f, 25, 100 + (i * 8)));
+
+    // Page 3: POS & Sales
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.text('2. Smart Point of Sale', 20, 40);
+    doc.setFontSize(11);
+    const posDesc = "The heart of JENA POS. Process transactions seamlessly with real-time sync across devices. Supports multiple payment methods, digital receipt generation, and payment reminder links for pending amounts.";
+    doc.text(doc.splitTextToSize(posDesc, 170), 20, 55);
+    
+    if (posImg) {
+      doc.addImage(posImg, 'PNG', 20, 75, 170, 90);
+    } else {
+      doc.setFillColor(240, 240, 240);
+      doc.rect(20, 75, 170, 90, 'F');
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text('[ Screenshot: Real-time Checkout Interface ]', 105, 120, { align: 'center' });
+    }
+
+    // Page 4: Inventory & Damages
+    doc.addPage();
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.setFontSize(22);
+    doc.text('3. Inventory Management', 20, 40);
+    doc.setFontSize(11);
+    const invDesc = "Manage thousands of products with ease. Features include low-stock alerts, category organization, cost-of-goods tracking, and a dedicated Damage Control module for logging non-saleable losses.";
+    doc.text(doc.splitTextToSize(invDesc, 170), 20, 55);
+    
+    if (invImg) {
+      doc.addImage(invImg, 'PNG', 20, 75, 170, 90);
+    } else {
+      doc.setFillColor(240, 240, 240);
+      doc.rect(20, 75, 170, 90, 'F');
+      doc.text('[ Screenshot: Stock Analytics & Damage Records ]', 105, 120, { align: 'center' });
+    }
+
+    // Page 5: AI Intelligence
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.text('4. JENA AI Intelligence', 20, 40);
+    doc.setFontSize(11);
+    const aiDesc = "Powered by Google Gemini, the AI Intelligence hub analyzes your financial history and inventory trends to provide natural language advice. Ask it about growth strategies, profit leaks, or top-performing products.";
+    doc.text(doc.splitTextToSize(aiDesc, 170), 20, 55);
+    
+    // Draw Pad UI instead of screenshot
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(65, 75, 80, 110, 'F'); // Main Pad
+    doc.setFillColor(textColor[0], textColor[1], textColor[2]);
+    doc.rect(65, 75, 80, 8, 'F'); // Header line
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('GEMINI', 105, 130, { align: 'center', angle: 358 });
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('AI INTELLIGENCE HUB', 105, 180, { align: 'center' });
+
+    // Page 6: Affiliate System
+    doc.addPage();
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.setFontSize(22);
+    doc.text('5. Affiliate Engine', 20, 40);
+    doc.setFontSize(11);
+    const affDesc = "Scale your ecosystem by rewarding partners. The affiliate system tracks referrals, generates unique links, and offers a dashboard for performance tracking and commission management.";
+    doc.text(doc.splitTextToSize(affDesc, 170), 20, 55);
+
+    // Final Page
+    doc.addPage();
+    doc.setFillColor(textColor[0], textColor[1], textColor[2]);
+    doc.rect(0, 0, 210, 297, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.text('© 2026 JENA POS • Software by Micheal Sakwa', 105, 150, { align: 'center' });
+    doc.text('Transforming the future of retail enterprise.', 105, 160, { align: 'center' });
+
+    doc.save(`JENA_POS_System_Overview_${currentOrg?.name || 'Manual'}.pdf`);
+  };
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-10 space-y-12 overflow-hidden relative">
+      <div className="absolute top-0 right-0 p-8 opacity-5">
+        <Sparkles className="w-64 h-64 text-indigo-500" />
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
+        <div className="space-y-2">
+          <h2 className="text-4xl font-black text-white tracking-tight">System Overview</h2>
+          <p className="text-zinc-400 text-lg">Detailed operations manual and capabilities report.</p>
+        </div>
+        <button 
+          onClick={downloadSystemDoc}
+          className="flex items-center gap-3 bg-white hover:bg-zinc-100 text-zinc-950 px-8 py-4 rounded-2xl font-black transition-all shadow-2xl shadow-white/10 active:scale-95 group"
+        >
+          <div className="p-1 px-2.5 bg-indigo-600 text-white text-[10px] rounded-lg tracking-tighter uppercase font-black mr-1 group-hover:bg-indigo-500">PRO</div>
+          <FileDown className="w-5 h-5" />
+          Download PDF Guide
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
+        {[
+          { title: "Smart POS", icon: Calculator, desc: "High-speed selling with real-time records.", img: "/smart-pos-screenshot.png" },
+          { title: "AI Analytics", icon: BrainCircuit, desc: "Business intelligence via Google Gemini.", img: null },
+          { title: "Inventory", icon: PackageCheck, desc: "Scan, track, and optimize stock levels.", img: "/inventory-screenshot.png" }
+        ].map((item, idx) => (
+          <div key={idx} className="group bg-zinc-950 border border-zinc-800/50 rounded-3xl overflow-hidden hover:border-indigo-500/50 transition-all">
+            <div className="h-48 overflow-hidden grayscale group-hover:grayscale-0 transition-all flex items-center justify-center bg-zinc-900">
+              {item.img ? (
+                <img src={item.img} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black p-8">
+                  <motion.div 
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="w-32 h-44 bg-zinc-800 rounded-xl border-t-[12px] border-indigo-600 shadow-2xl relative flex flex-col p-4 gap-3 group-hover:rotate-3 transition-transform duration-500"
+                  >
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-12 h-2 bg-zinc-900 rounded-full" />
+                    <div className="space-y-2">
+                      <div className="h-1 w-full bg-zinc-700 rounded-full opacity-50" />
+                      <div className="h-1 w-3/4 bg-zinc-700 rounded-full opacity-50" />
+                    </div>
+                    <div className="flex-1 flex items-center justify-center">
+                      <span className="text-[10px] font-black text-indigo-400 tracking-[0.3em] uppercase rotate-[-2deg]">Gemini</span>
+                    </div>
+                    <div className="h-1 w-1/2 bg-zinc-700 rounded-full opacity-50 self-end" />
+                  </motion.div>
+                </div>
+              )}
+            </div>
+            <div className="p-6 space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-500/10 rounded-xl">
+                  <item.icon className="w-5 h-5 text-indigo-400" />
+                </div>
+                <h3 className="font-bold text-zinc-100">{item.title}</h3>
+              </div>
+              <p className="text-zinc-500 text-sm">{item.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-zinc-800/30 p-8 rounded-3xl border border-zinc-800/50 relative z-10">
+        <h3 className="text-xl font-bold text-white mb-6">Enterprise Features</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            "Multi-organization deployment support",
+            "Advanced privilege-based staff management",
+            "Real-time Firebase Cloud synchronization",
+            "Automated PDF financial auditing tools",
+            "Damages tracking with image evidence",
+            "Affiliate marketing and referral automation"
+          ].map((feature, i) => (
+            <div key={i} className="flex items-center gap-3 text-zinc-400">
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+              <span className="text-sm font-medium">{feature}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HelpSection() {
-  const { userProfile } = useFirebase();
+  const { currentOrg, userProfile } = useFirebase();
   // Using the GitHub profile image
   const developerImage = "https://github.com/MikeTymer.png";
+  const [activeHelpTab, setActiveHelpTab] = useState<'overview' | 'guide' | 'support'>('overview');
 
   return (
     <div className="max-w-5xl space-y-12 pb-20">
@@ -5960,7 +6405,31 @@ function HelpSection() {
         </div>
       </div>
 
-      {/* Recent Updates Banner */}
+      <div className="flex border-b border-zinc-800">
+        {[
+          { id: 'overview', label: 'System Overview', icon: LayoutDashboard },
+          { id: 'guide', label: 'Operations Guide', icon: FileText },
+          { id: 'support', label: 'Legal & Profile', icon: ShieldCheck }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveHelpTab(tab.id as any)}
+            className={cn(
+              "flex items-center gap-2 px-8 py-4 text-xs font-bold uppercase tracking-widest border-b-2 transition-all",
+              activeHelpTab === tab.id ? "border-indigo-500 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeHelpTab === 'overview' && <SystemOverviewDoc currentOrg={currentOrg} />}
+
+      {activeHelpTab === 'guide' && (
+        <>
+          {/* Recent Updates Banner */}
       <div className="bg-indigo-600 p-8 rounded-[2.5rem] relative overflow-hidden group">
         <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500">
           <Sparkles className="w-32 h-32 text-white" />
@@ -6020,49 +6489,54 @@ function HelpSection() {
         />
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[2.5rem] space-y-8">
-        <div className="flex items-center gap-6">
-          <div className="p-4 bg-indigo-600/10 rounded-2xl">
-            <Users className="w-10 h-10 text-indigo-500" />
+        </>
+      )}
+
+      {activeHelpTab === 'support' && (
+        <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[2.5rem] space-y-8">
+          <div className="flex items-center gap-6">
+            <div className="p-4 bg-indigo-600/10 rounded-2xl">
+              <Users className="w-10 h-10 text-indigo-500" />
+            </div>
+            <div>
+              <h3 className="text-3xl font-black text-zinc-100 tracking-tight">About Developer</h3>
+              <p className="text-zinc-400 text-lg">The vision behind the platform</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-3xl font-black text-zinc-100 tracking-tight">About Developer</h3>
-            <p className="text-zinc-400 text-lg">The vision behind the platform</p>
-          </div>
-        </div>
-        
-        <div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
-          <div className="w-48 h-48 rounded-[3rem] bg-zinc-800 border-8 border-zinc-800/50 flex items-center justify-center overflow-hidden shrink-0 shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500">
-            <img 
-              src={developerImage} 
-              alt="Micheal Sakwa" 
-              className="w-full h-full object-cover scale-110"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <div className="space-y-6">
-            <h4 className="text-2xl font-black text-zinc-100">Micheal Sakwa</h4>
-            <p className="text-zinc-400 leading-relaxed text-lg italic">
-              "My mission is to democratize professional business tools for every entrepreneur."
-            </p>
-            <p className="text-zinc-400 leading-relaxed">
-              Micheal Sakwa is a visionary software developer dedicated to building innovative solutions that empower small businesses. 
-              With a focus on user experience and robust financial accuracy, he creates tools that simplify complex business processes. 
-              JENA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.
-            </p>
-            <div className="flex flex-wrap gap-6 pt-4">
-              <a href="https://github.com/MikeTymer" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-bold transition-colors">
-                <Github className="w-5 h-5" />
-                <span>GitHub Profile</span>
-              </a>
-              <div className="flex items-center gap-2 text-zinc-500">
-                <Code2 className="w-5 h-5" />
-                <span>Software Engineer & Product Designer</span>
+          
+          <div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
+            <div className="w-48 h-48 rounded-[3rem] bg-zinc-800 border-8 border-zinc-800/50 flex items-center justify-center overflow-hidden shrink-0 shadow-2xl rotate-3 hover:rotate-0 transition-transform duration-500">
+              <img 
+                src={developerImage} 
+                alt="Micheal Sakwa" 
+                className="w-full h-full object-cover scale-110"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="space-y-6">
+              <h4 className="text-2xl font-black text-zinc-100">Micheal Sakwa</h4>
+              <p className="text-zinc-400 leading-relaxed text-lg italic">
+                "My mission is to democratize professional business tools for every entrepreneur."
+              </p>
+              <p className="text-zinc-400 leading-relaxed">
+                Micheal Sakwa is a visionary software developer dedicated to building innovative solutions that empower small businesses. 
+                With a focus on user experience and robust financial accuracy, he creates tools that simplify complex business processes. 
+                JENA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.
+              </p>
+              <div className="flex flex-wrap gap-6 pt-4">
+                <a href="https://github.com/MikeTymer" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-bold transition-colors">
+                  <Github className="w-5 h-5" />
+                  <span>GitHub Profile</span>
+                </a>
+                <div className="flex items-center gap-2 text-zinc-500">
+                  <Code2 className="w-5 h-5" />
+                  <span>Software Engineer & Product Designer</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -7438,6 +7912,75 @@ function MomoPaymentModal({ planName, price, currency, onClose, onConfirm, isPro
   );
 }
 
+function ConflictScreen({ org, user, onResolved }: { org: { id: string, name: string }, user: any, onResolved: () => void }) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteAndRestart = async () => {
+    if (!window.confirm(`Are you sure you want to delete access to ${org.name} and start fresh? This action cannot be undone.`)) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'organizations', org.id));
+      onResolved();
+    } catch (err) {
+      console.error("Delete failed:", err);
+      alert("Failed to delete organization. You might not have permission.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 p-8 rounded-[32px] shadow-2xl space-y-6 text-center">
+        <div className="bg-amber-500/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto border border-amber-500/20">
+          <AlertTriangle className="w-8 h-8 text-amber-500" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-zinc-100">Account Already Registered</h2>
+          <p className="text-sm text-zinc-400">
+            The email <span className="font-bold text-zinc-200">{user.email}</span> is already associated with the business:
+          </p>
+          <div className="bg-zinc-800/50 py-3 px-4 rounded-xl">
+            <p className="text-lg font-black text-indigo-400 tracking-tight">{org.name}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3 pt-4">
+          <button 
+            onClick={onResolved}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-2xl transition-all shadow-xl"
+          >
+            Continue with this account
+          </button>
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-zinc-800"></div>
+            </div>
+            <div className="relative flex justify-center text-[10px] uppercase">
+              <span className="bg-zinc-900 px-2 text-zinc-600 font-bold tracking-widest">Or start fresh</span>
+            </div>
+          </div>
+          <button 
+            onClick={handleDeleteAndRestart}
+            disabled={isDeleting}
+            className="w-full bg-zinc-800 hover:bg-red-900/20 hover:text-red-400 text-zinc-400 font-bold py-4 rounded-2xl transition-all border border-transparent hover:border-red-900/50 disabled:opacity-50"
+          >
+            {isDeleting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Delete access and create new account'}
+          </button>
+        </div>
+        
+        <button 
+          onClick={() => auth.signOut()}
+          className="text-xs text-zinc-600 hover:text-zinc-400 underline underline-offset-4"
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: 'light' | 'dark') => void }) {
   const { user, userProfile, organizations, currentOrg, setCurrentOrg } = useFirebase();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'customers' | 'damages' | 'transactions' | 'admin' | 'reports' | 'help' | 'settings' | 'sales-analytics' | 'expenses-analytics' | 'profit-analytics' | 'affiliate' | 'affiliate-referrals' | 'terms' | 'privacy'>('dashboard');
@@ -7500,42 +8043,58 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       oneMonthFromNow.setMonth(now.getMonth() + 1);
 
       for (const item of inventory) {
-        if (!item.expiryDate) continue;
+        // Expiry check
+        if (item.expiryDate) {
+          const expiry = new Date(item.expiryDate);
+          const isExpired = expiry < now;
+          const isExpiringSoon = expiry < oneMonthFromNow;
 
-        const expiry = new Date(item.expiryDate);
-        const isExpired = expiry < now;
-        const isExpiringSoon = expiry < oneMonthFromNow;
-
-        if (isExpiringSoon) {
-          // Check if we already notified for this item's current status
-          const notificationKey = `expiry_${item.id}_${item.expiryDate}`;
-          let lastNotified = null;
-          try {
-            lastNotified = localStorage.getItem(notificationKey);
-          } catch (e) {}
-          
-          // Notify once every 7 days if still expiring soon/expired
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(now.getDate() - 7);
-          
-          if (!lastNotified || new Date(lastNotified) < sevenDaysAgo) {
-            const title = isExpired ? 'Product Expired' : 'Product Expiring Soon';
-            const message = isExpired 
-              ? `${item.name} (Batch: ${item.batchNumber || 'N/A'}) has expired on ${formatDate(item.expiryDate)}. Please remove from stock.`
-              : `${item.name} (Batch: ${item.batchNumber || 'N/A'}) will expire on ${formatDate(item.expiryDate)}. Consider ordering new stock.`;
-
-            await createDocument(`organizations/${currentOrg.id}/notifications`, {
-              type: 'inventory',
-              title,
-              message,
-              timestamp: now.toISOString(),
-              read: false,
-              data: { productId: item.id },
-              createdAt: now.toISOString()
-            });
-            
+          if (isExpiringSoon) {
+            const notificationKey = `expiry_${item.id}_${item.expiryDate}`;
+            let lastNotified = null;
             try {
-              localStorage.setItem(notificationKey, now.toISOString());
+              lastNotified = localStorage.getItem(notificationKey);
+            } catch (e) {}
+            
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(now.getDate() - 7);
+            
+            if (!lastNotified || new Date(lastNotified) < sevenDaysAgo) {
+              const title = isExpired ? 'Product Expired' : 'Product Expiring Soon';
+              const message = isExpired 
+                ? `${item.name} (Batch: ${item.batchNumber || 'N/A'}) has expired on ${formatDate(item.expiryDate)}. Please remove from stock.`
+                : `${item.name} (Batch: ${item.batchNumber || 'N/A'}) will expire on ${formatDate(item.expiryDate)}. Consider ordering new stock.`;
+
+              await createNotification('inventory', title, message, { productId: item.id });
+              
+              try {
+                localStorage.setItem(notificationKey, now.toISOString());
+              } catch (e) {}
+            }
+          }
+        }
+
+        // Low stock check
+        if (item.quantity <= 10) {
+          const lowStockKey = `lowstock_${item.id}_${item.quantity}`;
+          let lastNotifiedLow = null;
+          try {
+            lastNotifiedLow = localStorage.getItem(lowStockKey);
+          } catch (e) {}
+
+          const threeDaysAgo = new Date();
+          threeDaysAgo.setDate(now.getDate() - 3);
+
+          if (!lastNotifiedLow || new Date(lastNotifiedLow) < threeDaysAgo) {
+            const title = item.quantity === 0 ? 'Out of Stock' : 'Low Stock Alert';
+            const message = item.quantity === 0
+              ? `${item.name} is completely out of stock. Please restock immediately.`
+              : `${item.name} is running low (${item.quantity} remaining). Consider restocking soon.`;
+
+            await createNotification('inventory', title, message, { productId: item.id });
+
+            try {
+              localStorage.setItem(lowStockKey, now.toISOString());
             } catch (e) {}
           }
         }
@@ -7611,6 +8170,38 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         read: false,
         metadata
       });
+
+      // Send email to owner if email exists
+      let ownerEmail = currentOrg.ownerEmail;
+      
+      // Fallback for legacy organizations: fetch owner email from users collection
+      if (!ownerEmail && currentOrg.ownerUid) {
+        try {
+          const ownerDoc = await getDoc(doc(db, 'users', currentOrg.ownerUid));
+          if (ownerDoc.exists()) {
+            ownerEmail = ownerDoc.data().email;
+          }
+        } catch (e) {
+          console.error('Failed to fetch owner email for notification:', e);
+        }
+      }
+
+      if (ownerEmail) {
+        try {
+          await fetch('/api/email/notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: ownerEmail,
+              title,
+              message,
+              businessName: currentOrg.name
+            })
+          });
+        } catch (e) {
+          console.error('Failed to send notification email:', e);
+        }
+      }
     } catch (error) {
       console.error('Error creating notification:', error);
     }
@@ -8058,6 +8649,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         id: orgId,
         name: newOrgName.trim(),
         ownerUid: user.uid,
+        ownerEmail: user.email || userProfile?.email || '',
         country: 'US',
         currency: 'USD',
         address: '',
@@ -9563,6 +10155,31 @@ function AuthScreen() {
 
 function AppContent() {
   const { user, userProfile, loading, isAuthReady } = useFirebase();
+  const [conflictOrg, setConflictOrg] = useState<{ id: string, name: string } | null>(null);
+  const [isCheckingConflict, setIsCheckingConflict] = useState(false);
+
+  useEffect(() => {
+    if (user && !userProfile && !loading && isAuthReady) {
+      const checkConflict = async () => {
+        setIsCheckingConflict(true);
+        try {
+          const orgsSnap = await getDocs(query(collection(db, 'organizations'), where('ownerEmail', '==', user.email)));
+          if (!orgsSnap.empty) {
+            const orgData = orgsSnap.docs[0].data();
+            // If the ownerUid is different, we have a conflict
+            if (orgData.ownerUid !== user.uid) {
+              setConflictOrg({ id: orgsSnap.docs[0].id, name: orgData.name });
+            }
+          }
+        } catch (err) {
+          console.error("Conflict check failed:", err);
+        } finally {
+          setIsCheckingConflict(false);
+        }
+      };
+      checkConflict();
+    }
+  }, [user, userProfile, loading, isAuthReady]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -9643,6 +10260,16 @@ function AppContent() {
   }
 
   if (user) {
+    if (conflictOrg) {
+      return <ConflictScreen org={conflictOrg} user={user} onResolved={() => setConflictOrg(null)} />;
+    }
+    if (isCheckingConflict) {
+      return (
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+        </div>
+      );
+    }
     if (!userProfile) {
       return (
         <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-6">

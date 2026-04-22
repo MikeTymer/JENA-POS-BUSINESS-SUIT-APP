@@ -19,6 +19,7 @@ export interface Organization {
   id: string;
   name: string;
   ownerUid: string;
+  ownerEmail?: string;
   country?: string;
   currency?: string;
   address?: string;
@@ -158,7 +159,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // 1. Subscribe to owned organizations
     const ownedQuery = query(collection(db, 'organizations'), where('ownerUid', '==', user.uid));
     const unsubOwned = onSnapshot(ownedQuery, (snapshot) => {
-      const owned = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Organization));
+      const owned = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Auto-heal ownerEmail if missing
+        if (!data.ownerEmail && user.email) {
+          updateDocument('organizations', doc.id, { ownerEmail: user.email });
+        }
+        return { id: doc.id, ...data } as Organization;
+      });
       setOwnedOrgs(owned);
     });
 

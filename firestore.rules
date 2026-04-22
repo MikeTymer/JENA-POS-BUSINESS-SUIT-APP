@@ -11,7 +11,8 @@ service cloud.firestore {
 
     function isOrgOwner(orgId) {
       return isAuthenticated() && 
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid;
+        (get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerUid == request.auth.uid ||
+         get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerEmail == request.auth.token.email);
     }
 
     function isStaffMember(orgId) {
@@ -76,7 +77,7 @@ service cloud.firestore {
 
     function isValidOrganization(data) {
       return hasRequiredFields(['name', 'ownerUid', 'plan']) &&
-             hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'logoUrl', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt', 'isPaid', 'trialExpiresAt', 'referredBy', 'businessType']) &&
+             hasOnlyAllowedFields(['id', 'name', 'ownerUid', 'ownerEmail', 'country', 'currency', 'address', 'uprsRegistrationNumber', 'logoUrl', 'plan', 'subscriptionStatus', 'createdAt', 'updatedAt', 'expiresAt', 'isPaid', 'trialExpiresAt', 'referredBy', 'businessType']) &&
              data.id is string && data.id.size() < 50 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.ownerUid is string && data.ownerUid.size() < 100 &&

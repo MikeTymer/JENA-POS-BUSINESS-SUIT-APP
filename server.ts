@@ -76,6 +76,50 @@ async function startServer() {
     }
   });
 
+  // Generic Notification Email Endpoint
+  app.post('/api/email/notification', async (req, res) => {
+    const { email, title, message, businessName } = req.body;
+
+    if (!email || !title || !message) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || '"JENA POS" <noreply@jena-pos.com>',
+      to: email,
+      subject: `[JENA POS] ${title}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
+          <h2 style="color: #4f46e5;">New Notification</h2>
+          ${businessName ? `<p style="font-weight: bold; color: #374151;">Business: ${businessName}</p>` : ''}
+          <div style="background-color: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4f46e5;">
+            <h3 style="margin-top: 0; color: #111827;">${title}</h3>
+            <p style="color: #4b5563; line-height: 1.5;">${message}</p>
+          </div>
+          <p style="font-size: 14px; color: #6b7280;">You can view more details by logging into your JENA POS dashboard.</p>
+          <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+          <p style="font-size: 12px; color: #9ca3af;">This is an automated notification from JENA POS. Please do not reply.</p>
+        </div>
+      `,
+    };
+
+    try {
+      if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER) {
+        console.log('--- MOCK NOTIFICATION EMAIL SENT ---');
+        console.log('To:', email);
+        console.log('Subject:', mailOptions.subject);
+        console.log('-----------------------');
+        return res.json({ success: true, message: 'Email logged to console (no SMTP config)' });
+      }
+
+      await transporter.sendMail(mailOptions);
+      res.json({ success: true, message: 'Notification email sent successfully' });
+    } catch (error: any) {
+      console.error('Error sending notification email:', error);
+      res.status(500).json({ error: 'Failed to send email', details: error.message });
+    }
+  });
+
   // Helper to fix common URL mistakes
   const getCorrectMomoUrl = (baseUrl: string, path: string): string => {
     let cleanBaseUrl = baseUrl.trim();
