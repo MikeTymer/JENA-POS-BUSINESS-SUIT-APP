@@ -6140,8 +6140,9 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
       putOnlyUsedFonts: true
     });
 
-    const primaryColor = [79, 70, 229]; // Indigo-600
-    const textColor = [24, 24, 27]; // Zinc-900
+    const primaryColor: [number, number, number] = [79, 70, 229]; // Indigo-600
+    const textColor: [number, number, number] = [24, 24, 27]; // Zinc-900
+    const accentColor: [number, number, number] = [220, 38, 38]; // Red-600 (for title page)
 
     const loadImage = (url: string): Promise<string | null> => {
       return new Promise((resolve) => {
@@ -6168,215 +6169,266 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     const posImg = await loadImage('/smart-pos-screenshot.png');
     const invImg = await loadImage('/inventory-screenshot.png');
 
-    // Title Page
-    doc.setFillColor(textColor[0], textColor[1], textColor[2]);
+    // PAGE 1: TITLE PAGE
+    doc.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
     doc.rect(0, 0, 210, 297, 'F');
     
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(48);
+    doc.setFontSize(42);
     doc.setFont('helvetica', 'bold');
-    doc.text('JENA POS', 20, 80);
+    doc.text('JENA POS', 105, 50, { align: 'center' });
+    doc.setFontSize(28);
+    doc.text('Operations Manual', 105, 65, { align: 'center' });
     
-    doc.setFontSize(18);
-    doc.text('System Operations Manual & Overview', 20, 100);
+    // Collage area
+    if (posImg) doc.addImage(posImg, 'PNG', 20, 85, 120, 70);
+    if (invImg) doc.addImage(invImg, 'PNG', 70, 130, 120, 70);
+    if (posImg) doc.addImage(posImg, 'PNG', 20, 185, 80, 45, undefined, 'FAST');
+    if (invImg) doc.addImage(invImg, 'PNG', 110, 200, 80, 45, undefined, 'FAST');
     
-    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.rect(20, 110, 40, 2, 'F');
-    
-    doc.setFontSize(12);
-    doc.setTextColor(150, 150, 150);
-    doc.text(`Generated for: ${currentOrg?.name || 'Valued Partner'}`, 20, 260);
-    doc.text(`Version: 2.4.0 • ${new Date().toLocaleDateString()}`, 20, 270);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Created for: Retail and Wholesale businesses`, 105, 260, { align: 'center' });
+    doc.text('By Micheal Sakwa', 105, 270, { align: 'center' });
+    doc.text('April 22, 2026', 105, 280, { align: 'center' });
 
-    // Page 2: Table of Contents & Core Vision
+    // PAGE 2: ABOUT AUTHOR
     doc.addPage();
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-    doc.setFontSize(24);
-    doc.text('1. Core Vision', 20, 40);
-    doc.setFontSize(11);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ABOUT AUTHOR', 105, 40, { align: 'center' });
+    
+    doc.setFontSize(13);
     doc.setFont('helvetica', 'normal');
-    const introText = "JENA POS is designed by Micheal Sakwa to democratize professional business tools. Our mission is to empower entrepreneurs with robust financial accuracy and modern UI experiences that simplify complex operations.";
-    const splitIntro = doc.splitTextToSize(introText, 170);
-    doc.text(splitIntro, 20, 55);
+    const authorText = "Micheal Sakwa is a visionary software developer dedicated to building innovative solutions that empower small businesses.\n\nWith a focus on user experience and robust financial accuracy, he creates tools that simplify complex business processes.\n\nJENA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.";
+    const splitAuthor = doc.splitTextToSize(authorText, 150);
+    doc.text(splitAuthor, 105, 75, { align: 'center' });
 
-    doc.setFontSize(18);
-    doc.text('Platform Functions:', 20, 85);
-    const functions = [
-      '• Smart Point of Sale (POS): High-speed checkout & reminders.',
-      '• Inventory Pro: Real-time stock tracking & alerts.',
-      '• Financial Fortress: Enterprise-grade reporting.',
-      '• JENA AI Intelligence: Natural Language business analysis.',
-      '• Damage & Loss Control: Digital recording for accountability.',
-      '• Affiliate Engine: Scalable growth through referrals.'
-    ];
-    functions.forEach((f, i) => doc.text(f, 25, 100 + (i * 8)));
-
-    // Page 3: POS & Sales
+    // PAGE 3: 1 Executive Summary and Vision
     doc.addPage();
     doc.setFontSize(22);
-    doc.text('2. Smart Point of Sale', 20, 40);
+    doc.setFont('helvetica', 'bold');
+    doc.text('1 Executive Summary and Vision', 20, 40);
+    
     doc.setFontSize(11);
-    const posDesc = "The heart of JENA POS. Process transactions seamlessly with real-time sync across devices. Supports multiple payment methods, digital receipt generation, and payment reminder links for pending amounts.";
-    doc.text(doc.splitTextToSize(posDesc, 170), 20, 55);
+    doc.setFont('helvetica', 'normal');
+    const execSummary = "JENA POS, designed by Micheal Sakwa, is engineered to democratize access to professional business tools, particularly for entrepreneurs in the retail, wholesale and pharmaceutical sectors. The platform combines robust financial accuracy with a modern, intuitive user interface that simplifies complex retail operations. Its core mission is to empower business owners by providing reliable, scalable tech- nology that streamlines sales, inventory, and financial management.\n\nAt its heart, JENA POS integrates multiple powerful modules: a Smart Point of Sale system that speeds up checkout and automates payment reminders; Inventory Pro, offering real-time stock monitoring and proactive low in stock alerts; Financial Fortress, which delivers enterprise-grade reporting and audit-ready financial statements; and JENA AI Intelligence, which leverages Google Gemini for natural language business analysis.\n\nAdditional features such as Damage & Loss Control ensure inventory accountability, while the Affiliate Engine supports re- ferral and commission management, creating a comprehensive ecosystem tai- lored for the pharmaceutical industry and beyond.";
+    doc.text(doc.splitTextToSize(execSummary, 170), 20, 55);
+
+    // PAGE 4: Interface Overview Collage
+    doc.addPage();
+    if (posImg) doc.addImage(posImg, 'PNG', 10, 20, 190, 80);
+    if (invImg) doc.addImage(invImg, 'PNG', 10, 105, 90, 60);
+    if (posImg) doc.addImage(posImg, 'PNG', 110, 105, 90, 60);
+    if (invImg) doc.addImage(invImg, 'PNG', 10, 170, 190, 80);
+
+    // PAGE 5: 2 Smart Point of Sale (POS)
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('2 Smart Point of Sale (POS)', 20, 40);
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const posText = "The POS module serves as the operational core of the JENA system, designed to handle high transaction volumes with speed and accuracy. It supports multi- ple payment methods, including cash, MTN Mobile Money, and credit-based pay- ments, ensuring convenience and flexibility for both customers and staff. Digital receipt generation enhances record-keeping and customer service.";
+    doc.text(doc.splitTextToSize(posText, 170), 20, 55);
     
     if (posImg) {
-      doc.addImage(posImg, 'PNG', 20, 75, 170, 90);
-    } else {
-      doc.setFillColor(240, 240, 240);
-      doc.rect(20, 75, 170, 90, 'F');
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text('[ Screenshot: Real-time Checkout Interface ]', 105, 120, { align: 'center' });
+      doc.addImage(posImg, 'PNG', 20, 85, 170, 95);
     }
 
-    // Page 4: Inventory & Damages
+    // PAGE 6: 2.1 Specialized Pharmaceutical Features
     doc.addPage();
-    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-    doc.setFontSize(22);
-    doc.text('3. Inventory Management', 20, 40);
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('2.1 Specialized Pharmaceutical Features', 20, 40);
+    
     doc.setFontSize(11);
-    const invDesc = "Manage thousands of products with ease. Features include low-stock alerts, category organization, cost-of-goods tracking, and a dedicated Damage Control module for logging non-saleable losses.";
-    doc.text(doc.splitTextToSize(invDesc, 170), 20, 55);
+    doc.setFont('helvetica', 'normal');
+    doc.text("Understanding the unique demands of the pharmaceutical retail environ- ment, the Pharma Edition of JENA POS includes custom functionalities:", 20, 55);
+    
+    const pharmaFeatures = [
+      "• Patient and Prescription Logging: During checkout, the system captures patient names alongside specific prescription codes (e.g., ”2x3”), ensuring compliance and traceability.",
+      "• Medical Professional Tracking: The ability to log the doctor’s name as- sociated with each sale facilitates professional accountability and supports regulatory requirements.",
+      "• Customer Credit and Debt Hub: Individual customer ledgers track out- standing balances, such as amounts like USh 900. Staff can record pay- ments or send reminders directly through actionable links, streamlining debt management."
+    ];
+    
+    let pharmaY = 75;
+    pharmaFeatures.forEach(feat => {
+      const splitFeat = doc.splitTextToSize(feat, 170);
+      doc.text(splitFeat, 20, pharmaY);
+      pharmaY += (splitFeat.length * 6) + 4;
+    });
+    
+    if (posImg) {
+      doc.addImage(posImg, 'PNG', 20, pharmaY + 10, 170, 90);
+    }
+    
+    doc.text("This versatility in payment and tracking ensures a seamless experience that supports both the business and its clientele with precision and care.", 20, 280);
+
+    // PAGE 7: 3 Inventory and Damage Management
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('3 Inventory and Damage Management', 20, 40);
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const invText = "Managing thousands of unique product SKUs with precision, JENA POS pro- vides comprehensive inventory oversight. Real-time visibility into stock levels, batch numbers, and expiration dates helps maintain optimal stock and prevent losses due to expiry.";
+    doc.text(doc.splitTextToSize(invText, 170), 20, 55);
     
     if (invImg) {
-      doc.addImage(invImg, 'PNG', 20, 75, 170, 90);
-    } else {
-      doc.setFillColor(240, 240, 240);
-      doc.rect(20, 75, 170, 90, 'F');
-      doc.text('[ Screenshot: Stock Analytics & Damage Records ]', 105, 120, { align: 'center' });
+      doc.addImage(invImg, 'PNG', 20, 85, 170, 95);
+      doc.addImage(invImg, 'PNG', 20, 190, 170, 95);
     }
 
-    // Page 5: AI Intelligence
+    // PAGE 8: 3.1 DamageControlModule / 3.2 AssetValuation
     doc.addPage();
-    doc.setFontSize(22);
-    doc.text('4. JENA AI Intelligence', 20, 40);
-    doc.setFontSize(11);
-    const aiDesc = "Powered by Google Gemini, the AI Intelligence hub analyzes your financial history and inventory trends to provide natural language advice. Ask it about growth strategies, profit leaks, or top-performing products.";
-    doc.text(doc.splitTextToSize(aiDesc, 170), 20, 55);
-    
-    // Draw Pad UI instead of screenshot
-    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.rect(65, 75, 80, 110, 'F'); // Main Pad
-    doc.setFillColor(textColor[0], textColor[1], textColor[2]);
-    doc.rect(65, 75, 80, 8, 'F'); // Header line
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
+    doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('GEMINI', 105, 130, { align: 'center', angle: 358 });
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('AI INTELLIGENCE HUB', 105, 180, { align: 'center' });
-
-    // Page 6: Affiliate System
-    doc.addPage();
-    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-    doc.setFontSize(22);
-    doc.text('5. Affiliate Engine', 20, 40);
+    doc.text('3.1 DamageControlModule', 20, 40);
     doc.setFontSize(11);
-    const affDesc = "Scale your ecosystem by rewarding partners. The affiliate system tracks referrals, generates unique links, and offers a dashboard for performance tracking and commission management.";
-    doc.text(doc.splitTextToSize(affDesc, 170), 20, 55);
-
-    // Page 7: Operations & Financial Guide
-    doc.addPage();
-    doc.setFontSize(22);
-    doc.text('6. Operations & Financial Guide', 20, 40);
-    
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Professional Financial Reporting (GAAP/IFRS)', 20, 55);
-    doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    const updateText = "JENA POS follows international accounting standards. You have access to professional Income Statements, Balance Sheets, and Cash Flow tracking.";
-    doc.text(doc.splitTextToSize(updateText, 170), 20, 62);
+    doc.text("The system logs non-saleable losses with detailed timestamps and descrip- tions, such as items marked as ”Water logged.” This digital logging ensures full accountability and enables management to track and analyze causes of damage or loss effectively.", 20, 50);
 
-    const guideModules = [
-      {
-        title: "Financial Statements",
-        details: "• Income Statement: Revenue, COGS, and Net Profit\n• Balance Sheet: Assets, Liabilities, and Equity\n• Cash Flow: Monitor actual cash movement"
-      },
-      {
-        title: "Credit Handling & Customer Tracking",
-        details: "• Track customer debts and credit limits in real-time\n• Automated payment reminders via shareable links\n• Historical credit behavior analysis for risk management"
-      },
-      {
-        title: "Medical & Specialized Tracking",
-        details: "• 'Medical' mode for Pharmacies and Clinics\n• Specialized fields for batch numbers, expiry, and patient records\n• Industry-standard compliance for medical inventory"
-      },
-      {
-        title: "Staff & Remote Management",
-        details: "• Admin, Manager, and Cashier roles with specific privileges\n• Real-time synchronization across different global locations\n• Monitor branch performance from a single central dashboard"
-      }
-    ];
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('3.2 AssetValuation', 20, 80);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text("Inventory valuation is calculated automatically, providing key insights into current assets, for example, assets valued at USh 9,200. This feature supports accurate financial reporting and operational decision-making.", 20, 90);
 
-    let currentY = 85;
-    guideModules.forEach((m) => {
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text(m.title, 20, currentY);
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      const details = doc.splitTextToSize(m.details, 160);
-      doc.text(details, 25, currentY + 6);
-      currentY += 30;
+    autoTable(doc, {
+      startY: 110,
+      head: [['Feature', 'Description']],
+      body: [
+        ['SKU Management', 'Supports thousands of unique product SKUs with batch and expiry tracking.'],
+        ['Real-Time Stock Status', 'Instant visibility into stock levels and alerts for low inventory'],
+        ['Damage Logging', 'Records details of damaged or lost items with timestamps and descriptions'],
+        ['Asset Valuation', 'Automatic calculation of total inventory value for financial accuracy']
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: primaryColor }
     });
 
-    // Page 8: Advanced AI & Analysis
+    // PAGE 9: 4 Financial Reporting Engine
     doc.addPage();
     doc.setFontSize(22);
-    doc.text('7. JENA AI: Your Silicon Partner', 20, 40);
+    doc.setFont('helvetica', 'bold');
+    doc.text('4 Financial Reporting Engine', 20, 40);
+    
     doc.setFontSize(11);
-    const aiPitch = "Unlock the power of predictive intelligence. JENA AI isn't just a reporter; it's a strategist that lives inside your business. Experience the competitive edge of enterprise-grade analysis at your fingertips.";
-    doc.text(doc.splitTextToSize(aiPitch, 170), 20, 55);
+    doc.setFont('helvetica', 'normal');
+    doc.text("JENA POS excels in delivering audit-ready, standardized financial statements generated from real-time transaction data. This engine equips business owners with clear, actionable insights into financial performance.", 20, 50);
 
-    const aiFeatures = [
-      { t: "Deep Financial Audits", d: "Instantly locate hidden profit leaks and unnecessary overhead before they impact your yearly growth." },
-      { t: "Smart Restocking", d: "Predictive inventory forecasting using historical sales velocity to ensure you never miss a sale or over-order." },
-      { t: "Growth Triggers", d: "Automated identification of scaling opportunities based on real-time market trends and product performance." }
-    ];
-
-    let aiY = 80;
-    aiFeatures.forEach(f => {
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      doc.text(f.t, 20, aiY);
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-      doc.text(doc.splitTextToSize(f.d, 170), 20, aiY + 7);
-      aiY += 25;
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('4.1 KeyFinancialMetrics(April2026)', 20, 75);
+    
+    autoTable(doc, {
+      startY: 85,
+      head: [['Metric', 'Value and Insight']],
+      body: [
+        ['Total', 'USh 6,100; a 12.5% increase reflecting strong sales growth'],
+        ['Revenue Operational Profitability', 'Net profit of USh 5,300 with an impressive 86.9% margin'],
+        ['Efficiency Score', 'Automated health rating based on financial margins and operational metrics']
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: accentColor }
     });
 
-    // Final Page
-    doc.addPage();
-    doc.setFillColor(textColor[0], textColor[1], textColor[2]);
-    doc.rect(0, 0, 210, 297, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.text('© 2026 JENA POS • Software by Micheal Sakwa', 105, 150, { align: 'center' });
-    doc.text('Transforming the future of retail enterprise.', 105, 160, { align: 'center' });
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('4.2 Standardized Financial Statements', 20, 140);
+    
+    const statements = [
+      "• Income Statement: Breaks down gross profit by subtracting direct inven- tory costs from total sales, providing a transparent view of profitability.",
+      "• Balance Sheet: Tracks total assets (e.g., USh 15,300) and liabilities, deliver- ing a clear snapshot of financial standing.",
+      "• Equity Report: Monitors changes in business value, including retained earnings and owner drawings, supporting long-term financial planning."
+    ];
+    
+    let stmtY = 150;
+    statements.forEach(stmt => {
+      const splitStmt = doc.splitTextToSize(stmt, 170);
+      doc.text(splitStmt, 20, stmtY);
+      stmtY += (splitStmt.length * 6) + 4;
+    });
+    
+    doc.text("These statements support compliance and inform strategic decisions with accuracy and clarity.", 20, 275);
 
-    doc.save(`JENA_POS_System_Overview_${currentOrg?.name || 'Manual'}.pdf`);
+    // PAGE 10: Reports Dashboard Preview Collage
+    doc.addPage();
+    if (invImg) doc.addImage(invImg, 'PNG', 10, 20, 190, 80);
+    if (posImg) doc.addImage(posImg, 'PNG', 10, 105, 190, 80);
+    if (invImg) doc.addImage(invImg, 'PNG', 10, 190, 190, 80);
+
+    // PAGE 11: 5 AdministrationandSecurity
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('5 AdministrationandSecurity', 20, 40);
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text("Business owners maintain full control over their operations through central- ized system settings and tiered team permissions, ensuring security and opera- tional integrity.", 20, 50);
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('5.1 Role-BasedAccessControl', 20, 75);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text("Team members are assigned specific roles such as Director, Manager, or Cashier. This segregation controls access levels to sensitive areas like financial reports and inventory modification, reducing risk while enabling efficient work- flows.", 20, 85);
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('5.2 Business Profile Customization', 20, 120);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text("JENA POS allows localization of business details, including addresses and company logos, to customize official documentation and align with company branding standards. This flexibility enhances professionalism in customer facing materials and internal records.", 20, 130);
+
+    // PAGE 12: Conclusion and References
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Conclusion', 20, 40);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    const conclusion = "JENA POS version presents a comprehensive, highly functional plat- form tailored for the pharmaceutical retail sector and adaptable to broader business contexts. By integrating advanced POS capabilities, precise inventory and damage management, robust financial reporting, and secure administrative controls, it empowers businesses to operate efficiently, transparently, and profitably. The system’s thoughtful design, underpinned by modern technology and AI-driven analytics, offers a compelling solution to the challenges faced by contemporary retail enterprises.";
+    doc.text(doc.splitTextToSize(conclusion, 170), 20, 55);
+
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('References', 20, 130);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const refs = [
+      "JENA POS System Documentation, Version 2.4.0, April 2026.",
+      "Google Gemini AI Platform, Technical Overview, 2025.",
+      "Financial Reporting Standards for Retail Businesses, 2024.",
+      "Pharmaceutical Retail Compliance Guidelines, 2025."
+    ];
+    refs.forEach((r, i) => doc.text(r, 20, 140 + (i * 7)));
+
+    doc.save(`JENA_POS_Operations_Manual_${currentOrg?.name || 'Manual'}.pdf`);
   };
 
   return (
-    <div className="bg-blue-950/20 border border-blue-500/30 rounded-[2.5rem] p-10 space-y-12 overflow-hidden relative shadow-2xl shadow-blue-500/5">
-      <div className="absolute top-0 right-0 p-8 opacity-5">
-        <Sparkles className="w-64 h-64 text-indigo-500" />
+    <div className="bg-blue-600/10 border border-blue-500/40 rounded-[2.5rem] p-10 space-y-12 overflow-hidden relative shadow-2xl shadow-blue-500/10">
+      <div className="absolute top-0 right-0 p-8 opacity-10">
+        <Sparkles className="w-64 h-64 text-blue-500" />
       </div>
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
         <div className="space-y-2">
           <h2 className="text-4xl font-black text-white tracking-tight">System Overview</h2>
-          <p className="text-zinc-400 text-lg">Detailed operations manual and capabilities report.</p>
+          <p className="text-zinc-300 text-lg font-medium">Detailed operations manual and capabilities report.</p>
         </div>
         <button 
           onClick={downloadSystemDoc}
-          className="flex items-center gap-3 bg-white hover:bg-zinc-100 text-zinc-950 px-8 py-4 rounded-2xl font-black transition-all shadow-2xl shadow-white/10 active:scale-95 group"
+          className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-black transition-all shadow-[0_0_40px_-10px_rgba(37,99,235,0.6)] active:scale-95 group border border-blue-400/30"
         >
-          <div className="p-1 px-2.5 bg-indigo-600 text-white text-[10px] rounded-lg tracking-tighter uppercase font-black mr-1 group-hover:bg-indigo-500">PRO</div>
+          <div className="p-1 px-2.5 bg-white text-blue-600 text-[10px] rounded-lg tracking-tighter uppercase font-black mr-1 group-hover:bg-blue-50">PRO</div>
           <FileDown className="w-5 h-5" />
           Download PDF Guide
         </button>
