@@ -257,7 +257,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, theme }: any) => (
   <button
     onClick={onClick}
     className={cn(
-      "flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200",
+      "flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-200 group relative",
       active 
         ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/20" 
         : theme === 'dark'
@@ -265,7 +265,10 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, theme }: any) => (
           : "text-slate-400 hover:bg-slate-800 hover:text-white"
     )}
   >
-    <Icon className="w-5 h-5" />
+    {active && (
+      <div className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-1/2 bg-red-400 rounded-full shadow-[0_0_8px_rgba(248,113,113,0.6)]" />
+    )}
+    <Icon className={cn("w-5 h-5", active ? "text-white" : "group-hover:text-red-400")} />
     <span className="font-medium">{label}</span>
   </button>
 );
@@ -274,10 +277,11 @@ const StatCard = ({ title, value, icon: Icon, trend, color, onClick }: any) => (
   <button 
     onClick={onClick}
     className={cn(
-      "bg-zinc-900 border border-zinc-800 p-6 rounded-2xl text-left transition-all group",
-      onClick && "hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/5 cursor-pointer"
+      "bg-zinc-900 border border-zinc-800 p-6 rounded-2xl text-left transition-all group relative overflow-hidden",
+      onClick && "hover:border-red-500/30 hover:shadow-lg hover:shadow-red-500/5 cursor-pointer"
     )}
   >
+    <div className="absolute top-0 right-0 w-24 h-24 bg-red-600/0 group-hover:bg-red-600/[0.03] blur-2xl rounded-full -mr-10 -mt-10 transition-colors pointer-events-none" />
     <div className="flex justify-between items-start mb-4">
       <div className={cn("p-3 rounded-xl", color)}>
         <Icon className="w-6 h-6 text-white" />
@@ -6416,23 +6420,23 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
   };
 
   return (
-    <div className="bg-blue-600/10 border border-blue-500/40 rounded-[2.5rem] p-10 space-y-12 overflow-hidden relative shadow-2xl shadow-blue-500/10">
-      <div className="absolute top-0 right-0 p-8 opacity-10">
-        <Sparkles className="w-64 h-64 text-blue-500" />
+    <div className="bg-[#0c1221] border border-blue-500/20 rounded-[3rem] p-10 space-y-12 overflow-hidden relative shadow-2xl shadow-blue-500/5">
+      <div className="absolute top-0 right-0 p-8 opacity-5">
+        <Sparkles className="w-96 h-96 text-blue-500" />
       </div>
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
-        <div className="space-y-2">
-          <h2 className="text-4xl font-black text-white tracking-tight">System Overview</h2>
-          <p className="text-zinc-300 text-lg font-medium">Detailed operations manual and capabilities report.</p>
+      <div className="relative z-10 p-8 sm:p-10 bg-blue-600/5 border-l-8 border-blue-600 rounded-r-[2rem] flex flex-col md:flex-row justify-between items-start md:items-center gap-8 shadow-xl shadow-blue-900/10">
+        <div className="space-y-3">
+          <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tighter">System Overview</h2>
+          <p className="text-blue-200/70 text-lg font-medium max-w-md">Access the complete JENNA POS operations manual, architecture report, and security guidelines.</p>
         </div>
         <button 
           onClick={downloadSystemDoc}
-          className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-black transition-all shadow-[0_0_40px_-10px_rgba(37,99,235,0.6)] active:scale-95 group border border-blue-400/30"
+          className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-5 rounded-2xl font-black transition-all shadow-[0_20px_50px_-15px_rgba(37,99,235,0.8)] active:scale-95 group border border-blue-400/30 whitespace-nowrap"
         >
-          <div className="p-1 px-2.5 bg-white text-blue-600 text-[10px] rounded-lg tracking-tighter uppercase font-black mr-1 group-hover:bg-blue-50">PRO</div>
-          <FileDown className="w-5 h-5" />
-          Download PDF Guide
+          <div className="p-1 px-2.5 bg-white text-blue-600 text-[10px] rounded-lg tracking-tighter uppercase font-black mr-1 group-hover:bg-blue-50">MANUAL</div>
+          <FileDown className="w-6 h-6" />
+          <span className="text-lg">Download PDF Guide</span>
         </button>
       </div>
 
@@ -6553,7 +6557,46 @@ function HelpSection() {
         ))}
       </div>
 
-      {activeHelpTab === 'overview' && <SystemOverviewDoc currentOrg={currentOrg} />}
+      {activeHelpTab === 'overview' && (
+        <div className="space-y-8">
+          <SystemOverviewDoc currentOrg={currentOrg} />
+          
+          <div className="pt-8 border-t border-zinc-800 space-y-4">
+            <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+              <Settings className="w-6 h-6 text-rose-500" />
+              Technical Scaling & Memory Management
+            </h3>
+            <div className="bg-rose-500/5 border border-rose-500/20 p-8 rounded-3xl space-y-4">
+              <div className="space-y-2">
+                <p className="text-zinc-200 font-semibold text-lg">Increasing System Memory</p>
+                <p className="text-zinc-400">
+                  To scale your Jenna Pos Business Suit instance for higher transaction volumes or larger inventory datasets, follow these steps:
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <p className="text-rose-400 text-sm font-bold uppercase tracking-wider">Cloud Environment</p>
+                  <ul className="text-zinc-400 text-sm space-y-2 list-disc list-inside">
+                    <li>Log in to your Cloud Console (Google Cloud, AWS, or Azure)</li>
+                    <li>Locate your <span className="text-white">Cloud Run</span> or <span className="text-white">App Engine</span> service</li>
+                    <li>Go to <span className="text-white">Configuration</span> → <span className="text-white">Resources</span></li>
+                    <li>Update Memory limit to <span className="text-rose-500 font-bold">1GiB</span> or <span className="text-rose-500 font-bold">2GiB</span> for standard business needs</li>
+                  </ul>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-indigo-400 text-sm font-bold uppercase tracking-wider">On-Premise Scaling</p>
+                  <ul className="text-zinc-400 text-sm space-y-2 list-disc list-inside">
+                    <li>Increase physical RAM on the hosting server</li>
+                    <li>Update your process manager (PM2/Docker) limits</li>
+                    <li>Configure <span className="text-white">NODE_OPTIONS="--max-old-space-size=2048"</span></li>
+                    <li>Optimize database indexing to reduce memory overhead</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeHelpTab === 'guide' && (
         <>
@@ -9102,7 +9145,18 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex">
+    <div className="min-h-screen bg-zinc-950 flex relative overflow-hidden">
+      {/* Edge Accent Lines */}
+      <div className="fixed top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-red-600/30 to-transparent z-[100] pointer-events-none" />
+      <div className="fixed bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-rose-600/30 to-transparent z-[100] pointer-events-none" />
+      <div className="fixed top-0 bottom-0 left-0 w-[1px] bg-gradient-to-b from-transparent via-red-600/10 to-transparent z-[100] pointer-events-none" />
+      <div className="fixed top-0 bottom-0 right-0 w-[1px] bg-gradient-to-b from-transparent via-rose-600/10 to-transparent z-[100] pointer-events-none" />
+
+      {/* Background Decorative Glows (Red theme accents) */}
+      <div className="fixed -top-24 -left-24 w-96 h-96 bg-red-600/10 blur-[120px] rounded-full pointer-events-none z-0" />
+      <div className="fixed -bottom-24 -right-24 w-96 h-96 bg-rose-600/10 blur-[120px] rounded-full pointer-events-none z-0" />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-indigo-600/[0.03] blur-[150px] rounded-full pointer-events-none z-0" />
+      
       {/* MoMo Payment Modal */}
       <AnimatePresence>
         {momoPaymentData && (
