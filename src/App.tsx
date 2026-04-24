@@ -4649,11 +4649,11 @@ const POSView = ({ currentOrg, showNotification, createNotification, userProfile
       showNotification('Sale processed successfully!');
     } catch (error: any) {
       console.error('Checkout failed:', error);
-      let errorMessage = error.message || 'Failed to process sale.';
+      let errorMessage = 'Failed to process sale. Please try again.';
       try {
         const parsed = JSON.parse(error.message);
         if (parsed.error.includes('insufficient permissions')) {
-          errorMessage = `Permission denied on ${parsed.path || 'unknown path'}. Please check your staff role.`;
+          errorMessage = "Access denied. You don't have permission to perform this action.";
         }
       } catch (e) {
         // Not a JSON error
@@ -5192,7 +5192,6 @@ function Customers({ showNotification, createNotification, permissions }: { show
       
       // In a real app, you would call an SMS/Email API here.
       // For this demo, we'll simulate the "sending" and show the generated message.
-      console.log(`Sending reminder to ${selectedCustomer.phone || selectedCustomer.email}: ${message}`);
       
       // Create a system notification about the reminder
       await createNotification({
@@ -6425,18 +6424,18 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
         <Sparkles className="w-96 h-96 text-blue-500" />
       </div>
 
-      <div className="relative z-10 p-8 sm:p-10 bg-blue-600/5 border-l-8 border-blue-600 rounded-r-[2rem] flex flex-col md:flex-row justify-between items-start md:items-center gap-8 shadow-xl shadow-blue-900/10">
-        <div className="space-y-3">
-          <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tighter">System Overview</h2>
-          <p className="text-blue-200/70 text-lg font-medium max-w-md">Access the complete JENNA POS operations manual, architecture report, and security guidelines.</p>
+      <div className="relative z-10 p-6 sm:p-8 bg-blue-600/5 border-l-8 border-blue-600 rounded-r-[2rem] flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 shadow-xl shadow-blue-900/10">
+        <div className="space-y-2">
+          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tighter">System Overview</h2>
+          <p className="text-blue-200/70 text-base font-medium max-w-md">Access the complete JENNA POS operations manual, architecture report, and security guidelines.</p>
         </div>
         <button 
           onClick={downloadSystemDoc}
-          className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-10 py-5 rounded-2xl font-black transition-all shadow-[0_20px_50px_-15px_rgba(37,99,235,0.8)] active:scale-95 group border border-blue-400/30 whitespace-nowrap"
+          className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3.5 rounded-xl font-bold transition-all shadow-[0_15px_40px_-12px_rgba(37,99,235,0.6)] active:scale-95 group border border-blue-400/30 shrink-0"
         >
-          <div className="p-1 px-2.5 bg-white text-blue-600 text-[10px] rounded-lg tracking-tighter uppercase font-black mr-1 group-hover:bg-blue-50">MANUAL</div>
-          <FileDown className="w-6 h-6" />
-          <span className="text-lg">Download PDF Guide</span>
+          <div className="p-0.5 px-2 bg-white text-blue-600 text-[10px] rounded-md tracking-tighter uppercase font-black mr-0.5 group-hover:bg-blue-50">MANUAL</div>
+          <FileDown className="w-5 h-5" />
+          <span className="text-sm sm:text-base">Download PDF Guide</span>
         </button>
       </div>
 
@@ -6557,46 +6556,7 @@ function HelpSection() {
         ))}
       </div>
 
-      {activeHelpTab === 'overview' && (
-        <div className="space-y-8">
-          <SystemOverviewDoc currentOrg={currentOrg} />
-          
-          <div className="pt-8 border-t border-zinc-800 space-y-4">
-            <h3 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Settings className="w-6 h-6 text-rose-500" />
-              Technical Scaling & Memory Management
-            </h3>
-            <div className="bg-rose-500/5 border border-rose-500/20 p-8 rounded-3xl space-y-4">
-              <div className="space-y-2">
-                <p className="text-zinc-200 font-semibold text-lg">Increasing System Memory</p>
-                <p className="text-zinc-400">
-                  To scale your Jenna Pos Business Suit instance for higher transaction volumes or larger inventory datasets, follow these steps:
-                </p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <p className="text-rose-400 text-sm font-bold uppercase tracking-wider">Cloud Environment</p>
-                  <ul className="text-zinc-400 text-sm space-y-2 list-disc list-inside">
-                    <li>Log in to your Cloud Console (Google Cloud, AWS, or Azure)</li>
-                    <li>Locate your <span className="text-white">Cloud Run</span> or <span className="text-white">App Engine</span> service</li>
-                    <li>Go to <span className="text-white">Configuration</span> → <span className="text-white">Resources</span></li>
-                    <li>Update Memory limit to <span className="text-rose-500 font-bold">1GiB</span> or <span className="text-rose-500 font-bold">2GiB</span> for standard business needs</li>
-                  </ul>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-indigo-400 text-sm font-bold uppercase tracking-wider">On-Premise Scaling</p>
-                  <ul className="text-zinc-400 text-sm space-y-2 list-disc list-inside">
-                    <li>Increase physical RAM on the hosting server</li>
-                    <li>Update your process manager (PM2/Docker) limits</li>
-                    <li>Configure <span className="text-white">NODE_OPTIONS="--max-old-space-size=2048"</span></li>
-                    <li>Optimize database indexing to reduce memory overhead</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {activeHelpTab === 'overview' && <SystemOverviewDoc currentOrg={currentOrg} />}
 
       {activeHelpTab === 'guide' && (
         <>
@@ -7928,16 +7888,13 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
     setIsProcessing(true);
     setError(null);
     try {
-      console.log('Attempting to accept terms for user:', userProfile.uid);
       const success = await updateDocument('users', userProfile.uid, {
         termsAcceptedAt: new Date().toISOString()
       });
       if (!success) {
         throw new Error("The server rejected the update. This might be a security rule issue. Please contact support.");
       }
-      console.log('Terms accepted successfully');
     } catch (err: any) {
-      console.error("Failed to accept terms:", err);
       setError(err.message || "An unexpected error occurred. Please try again.");
     } finally {
       setIsProcessing(false);
@@ -8726,7 +8683,6 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       await Promise.all(promises);
       showNotification('All notifications cleared');
     } catch (error) {
-      console.error('Error clearing notifications:', error);
       showNotification('Failed to clear notifications', 'error');
     }
   };
@@ -8962,8 +8918,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       }
     } catch (error) {
       console.error('Error in handleCreateOrg:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      showNotification(`Error: ${errorMessage}`, 'error');
+      showNotification('An unexpected error occurred. Please try again.', 'error');
     } finally {
       setIsProcessingOrg(false);
     }
@@ -10122,8 +10077,8 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                                               </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                              <p className="text-[10px] text-zinc-500 max-w-[200px] truncate" title={payment.error || payment.phoneNumber}>
-                                                {payment.error || payment.phoneNumber || '-'}
+                                              <p className="text-[10px] text-zinc-500 max-w-[200px] truncate" title={payment.status === 'failed' ? 'Payment attempt failed' : (payment.phoneNumber || '')}>
+                                                {payment.status === 'failed' ? 'Payment failed' : (payment.phoneNumber || '-')}
                                               </p>
                                             </td>
                                           </tr>
