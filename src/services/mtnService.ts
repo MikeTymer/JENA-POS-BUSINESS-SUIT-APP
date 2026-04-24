@@ -49,7 +49,7 @@ class MTNMoMoService {
             partyId: phoneNumber,
           },
           payerMessage: 'Payment for goods/services',
-          payeeNote: 'JENA POS Transaction',
+          payeeNote: 'JENNA POS Transaction',
         },
       }),
     });
@@ -99,7 +99,7 @@ class MTNMoMoService {
             partyId: phoneNumber,
           },
           payerMessage: 'Affiliate Commission Payout',
-          payeeNote: 'JENA POS Affiliate Program',
+          payeeNote: 'JENNA POS Affiliate Program',
         },
       }),
     });

@@ -1,5 +1,5 @@
 {
-  "name": "Jenna Business Suit POS",
+  "name": "Jenna Pos Business Suit",
   "description": "Comprehensive SaaS platform for stock, expense, and sales management with subscription billing. Designed by Micheal Sakwa for all small business needs.",
   "requestFramePermissions": ["camera", "geolocation"]
 }

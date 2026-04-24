@@ -342,7 +342,7 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
     // Header
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(currentOrg?.name || 'JENA POS', 40, y, { align: 'center' });
+    doc.text(currentOrg?.name || 'JENNA POS', 40, y, { align: 'center' });
     y += 6;
 
     doc.setFontSize(8);
@@ -453,7 +453,7 @@ const ReceiptModal = ({ receipt, onClose }: { receipt: ReceiptData, onClose: () 
               <img src={currentOrg.logoUrl} alt="Logo" className="h-16 w-auto object-contain" referrerPolicy="no-referrer" />
             </div>
           )}
-          <h2 className="text-2xl font-black tracking-tighter text-black">{currentOrg?.name || 'JENA POS'}</h2>
+          <h2 className="text-2xl font-black tracking-tighter text-black">{currentOrg?.name || 'JENNA POS'}</h2>
           {currentOrg?.address && (
             <p className="text-xs text-slate-700 font-medium">{currentOrg.address}</p>
           )}
@@ -600,7 +600,7 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
     doc.setFontSize(12);
     doc.setTextColor(15, 23, 42);
     doc.setFont('helvetica', 'bold');
-    doc.text(currentOrg?.name || 'JENA POS', 20, y);
+    doc.text(currentOrg?.name || 'JENNA POS', 20, y);
     y += 6;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
@@ -650,7 +650,7 @@ const InvoiceModal = ({ transaction, onClose }: { transaction: Transaction, onCl
             {currentOrg?.logoUrl ? (
               <img src={currentOrg.logoUrl} alt="Logo" className="h-10 w-auto object-contain mb-2" referrerPolicy="no-referrer" />
             ) : (
-              <h3 className="text-lg font-bold">{currentOrg?.name || 'JENA POS'}</h3>
+              <h3 className="text-lg font-bold">{currentOrg?.name || 'JENNA POS'}</h3>
             )}
             <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{currentOrg?.name || 'Business Solutions'}</p>
           </div>
@@ -740,7 +740,8 @@ function AIInsights({ financialData, inventory, currentOrg }: { financialData: a
 
       const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
       
-      const systemPrompt = `You are a professional business analyst for JENA POS, an advanced point-of-sale and financial management system. 
+      const systemPrompt = `You are a professional business analyst for JENNA POS, an advanced point-of-sale and financial management system. 
+      The system is called 'Jenna Pos Business Suit'. 
 Your goal is to help the business owner make better decisions using their data.
 You have access to the business data provided below. Analyze it and provide concise, actionable, and strategic insights.
 
@@ -796,7 +797,7 @@ Use Markdown for tables, bold text, and bullet points. Be professional and encou
       console.error("AI Analysis error:", error);
       
       // User request: Show "Coming Soon" instead of raw errors while quota/API stabilizes
-      const comingSoonMsg = `### 🚀 JENA AI Analyst: Your Silicon Strategist
+      const comingSoonMsg = `### 🚀 JENNA AI Analyst: Your Silicon Strategist
 
 Experience the competitive edge of enterprise-grade predictive analysis. I am currently optimizing my intelligence patterns to better analyze your specific business data. 
 
@@ -834,7 +835,7 @@ We are currently syncing with live network nodes. Your future-ready business ana
               <BarChart3 className="w-12 h-12 text-indigo-400" />
             </div>
             <div className="max-w-sm">
-              <p className="text-zinc-100 font-bold">Hello! I'm your JENA AI Analyst.</p>
+              <p className="text-zinc-100 font-bold">Hello! I'm your JENNA AI Analyst.</p>
               <p className="text-sm text-zinc-400">Ask me things like "How is my profit margin?", "Which products are performing best?", or "How can I reduce my expenses?"</p>
             </div>
           </div>
@@ -862,7 +863,7 @@ We are currently syncing with live network nodes. Your future-ready business ana
               )}
             </div>
             <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-1">
-              {m.role === 'user' ? 'You' : 'JENA AI'}
+              {m.role === 'user' ? 'You' : 'JENNA AI'}
             </span>
           </div>
         ))}
@@ -2414,6 +2415,7 @@ function AdminPanel({ currentOrg, showNotification, setIsCreatingOrg, isSuperAdm
             </div>
           </div>
         )}
+
       </div>
 
       <AnimatePresence>
@@ -2732,7 +2734,7 @@ function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { s
     doc.text('Profit & Loss Statement', 20, 25);
     
     doc.setFontSize(14);
-    doc.text(currentOrg?.name || 'JENA POS', 20, 35);
+    doc.text(currentOrg?.name || 'JENNA POS', 20, 35);
     
     doc.setFontSize(10);
     doc.setTextColor(100);
@@ -2767,7 +2769,7 @@ function Dashboard({ setActiveTab, setHighlightedTxId, isAdmin, isManager }: { s
     const finalY = (doc as any).lastAutoTable.finalY + 20;
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text('This statement is generated automatically by JENA POS. Most P&L statements use the accrual method, recording revenue when earned and expenses when incurred.', 20, finalY, { maxWidth: 170 });
+    doc.text('This statement is generated automatically by JENNA POS. Most P&L statements use the accrual method, recording revenue when earned and expenses when incurred.', 20, finalY, { maxWidth: 170 });
     
     doc.save(`PNL_Statement_${currentOrg?.name || 'Business'}_${dateStr}.pdf`);
   };
@@ -6176,7 +6178,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(42);
     doc.setFont('helvetica', 'bold');
-    doc.text('JENA POS', 105, 50, { align: 'center' });
+    doc.text('JENNA POS', 105, 50, { align: 'center' });
     doc.setFontSize(28);
     doc.text('Operations Manual', 105, 65, { align: 'center' });
     
@@ -6201,7 +6203,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     
     doc.setFontSize(13);
     doc.setFont('helvetica', 'normal');
-    const authorText = "Micheal Sakwa is a visionary software developer dedicated to building innovative solutions that empower small businesses.\n\nWith a focus on user experience and robust financial accuracy, he creates tools that simplify complex business processes.\n\nJENA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.";
+    const authorText = "Micheal Sakwa is a visionary software developer dedicated to building innovative solutions that empower small businesses.\n\nWith a focus on user experience and robust financial accuracy, he creates tools that simplify complex business processes.\n\nJENNA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.";
     const splitAuthor = doc.splitTextToSize(authorText, 150);
     doc.text(splitAuthor, 105, 75, { align: 'center' });
 
@@ -6213,7 +6215,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    const execSummary = "JENA POS, designed by Micheal Sakwa, is engineered to democratize access to professional business tools, particularly for entrepreneurs in the retail, wholesale and pharmaceutical sectors. The platform combines robust financial accuracy with a modern, intuitive user interface that simplifies complex retail operations. Its core mission is to empower business owners by providing reliable, scalable tech- nology that streamlines sales, inventory, and financial management.\n\nAt its heart, JENA POS integrates multiple powerful modules: a Smart Point of Sale system that speeds up checkout and automates payment reminders; Inventory Pro, offering real-time stock monitoring and proactive low in stock alerts; Financial Fortress, which delivers enterprise-grade reporting and audit-ready financial statements; and JENA AI Intelligence, which leverages Google Gemini for natural language business analysis.\n\nAdditional features such as Damage & Loss Control ensure inventory accountability, while the Affiliate Engine supports re- ferral and commission management, creating a comprehensive ecosystem tai- lored for the pharmaceutical industry and beyond.";
+    const execSummary = "JENNA POS Business Suit, designed by Micheal Sakwa, is engineered to democratize access to professional business tools, particularly for entrepreneurs in the retail, wholesale and pharmaceutical sectors. The platform combines robust financial accuracy with a modern, intuitive user interface that simplifies complex retail operations. Its core mission is to empower business owners by providing reliable, scalable tech- nology that streamlines sales, inventory, and financial management.\n\nAt its heart, JENNA POS integrates multiple powerful modules: a Smart Point of Sale system that speeds up checkout and automates payment reminders; Inventory Pro, offering real-time stock monitoring and proactive low in stock alerts; Financial Fortress, which delivers enterprise-grade reporting and audit-ready financial statements; and JENNA AI Intelligence, which leverages Google Gemini for natural language business analysis.\n\nAdditional features such as Damage & Loss Control ensure inventory accountability, while the Affiliate Engine supports re- ferral and commission management, creating a comprehensive ecosystem tai- lored for the pharmaceutical industry and beyond.";
     doc.text(doc.splitTextToSize(execSummary, 170), 20, 55);
 
     // PAGE 4: Interface Overview Collage
@@ -6231,7 +6233,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    const posText = "The POS module serves as the operational core of the JENA system, designed to handle high transaction volumes with speed and accuracy. It supports multi- ple payment methods, including cash, MTN Mobile Money, and credit-based pay- ments, ensuring convenience and flexibility for both customers and staff. Digital receipt generation enhances record-keeping and customer service.";
+    const posText = "The POS module serves as the operational core of the JENNA system, designed to handle high transaction volumes with speed and accuracy. It supports multi- ple payment methods, including cash, MTN Mobile Money, and credit-based pay- ments, ensuring convenience and flexibility for both customers and staff. Digital receipt generation enhances record-keeping and customer service.";
     doc.text(doc.splitTextToSize(posText, 170), 20, 55);
     
     if (posImg) {
@@ -6246,7 +6248,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text("Understanding the unique demands of the pharmaceutical retail environ- ment, the Pharma Edition of JENA POS includes custom functionalities:", 20, 55);
+    doc.text("Understanding the unique demands of the pharmaceutical retail environ- ment, the Pharma Edition of JENNA POS includes custom functionalities:", 20, 55);
     
     const pharmaFeatures = [
       "• Patient and Prescription Logging: During checkout, the system captures patient names alongside specific prescription codes (e.g., ”2x3”), ensuring compliance and traceability.",
@@ -6275,7 +6277,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    const invText = "Managing thousands of unique product SKUs with precision, JENA POS pro- vides comprehensive inventory oversight. Real-time visibility into stock levels, batch numbers, and expiration dates helps maintain optimal stock and prevent losses due to expiry.";
+    const invText = "Managing thousands of unique product SKUs with precision, JENNA POS pro- vides comprehensive inventory oversight. Real-time visibility into stock levels, batch numbers, and expiration dates helps maintain optimal stock and prevent losses due to expiry.";
     doc.text(doc.splitTextToSize(invText, 170), 20, 55);
     
     if (invImg) {
@@ -6320,7 +6322,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text("JENA POS excels in delivering audit-ready, standardized financial statements generated from real-time transaction data. This engine equips business owners with clear, actionable insights into financial performance.", 20, 50);
+    doc.text("JENNA POS excels in delivering audit-ready, standardized financial statements generated from real-time transaction data. This engine equips business owners with clear, actionable insights into financial performance.", 20, 50);
 
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
@@ -6385,7 +6387,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     doc.text('5.2 Business Profile Customization', 20, 120);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text("JENA POS allows localization of business details, including addresses and company logos, to customize official documentation and align with company branding standards. This flexibility enhances professionalism in customer facing materials and internal records.", 20, 130);
+    doc.text("JENNA POS allows localization of business details, including addresses and company logos, to customize official documentation and align with company branding standards. This flexibility enhances professionalism in customer facing materials and internal records.", 20, 130);
 
     // PAGE 12: Conclusion and References
     doc.addPage();
@@ -6394,7 +6396,7 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     doc.text('Conclusion', 20, 40);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    const conclusion = "JENA POS version presents a comprehensive, highly functional plat- form tailored for the pharmaceutical retail sector and adaptable to broader business contexts. By integrating advanced POS capabilities, precise inventory and damage management, robust financial reporting, and secure administrative controls, it empowers businesses to operate efficiently, transparently, and profitably. The system’s thoughtful design, underpinned by modern technology and AI-driven analytics, offers a compelling solution to the challenges faced by contemporary retail enterprises.";
+    const conclusion = "JENNA POS Business Suit presents a comprehensive, highly functional plat- form tailored for the pharmaceutical retail sector and adaptable to broader business contexts. By integrating advanced POS capabilities, precise inventory and damage management, robust financial reporting, and secure administrative controls, it empowers businesses to operate efficiently, transparently, and profitably. The system’s thoughtful design, underpinned by modern technology and AI-driven analytics, offers a compelling solution to the challenges faced by contemporary retail enterprises.";
     doc.text(doc.splitTextToSize(conclusion, 170), 20, 55);
 
     doc.setFontSize(18);
@@ -6403,14 +6405,14 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     const refs = [
-      "JENA POS System Documentation, Version 2.4.0, April 2026.",
+      "JENNA POS Business Suit System Documentation, Version 2.4.0, April 2026.",
       "Google Gemini AI Platform, Technical Overview, 2025.",
       "Financial Reporting Standards for Retail Businesses, 2024.",
       "Pharmaceutical Retail Compliance Guidelines, 2025."
     ];
     refs.forEach((r, i) => doc.text(r, 20, 140 + (i * 7)));
 
-    doc.save(`JENA_POS_Operations_Manual_${currentOrg?.name || 'Manual'}.pdf`);
+    doc.save(`JENNA_POS_Operations_Manual_${currentOrg?.name || 'Manual'}.pdf`);
   };
 
   return (
@@ -6514,7 +6516,7 @@ function HelpSection() {
           </div>
           <div>
             <h2 className="text-4xl font-black text-zinc-100 tracking-tight">Help Center</h2>
-            <p className="text-zinc-400 text-lg">Master your business with JENA POS v2.0</p>
+            <p className="text-zinc-400 text-lg">Master your business with JENNA POS v2.0</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -6634,7 +6636,7 @@ function HelpSection() {
           ]}
         />
         <HelpCard 
-          title="JENA AI Service" 
+          title="JENNA AI Service" 
           description="The futuristic brain of your retail enterprise."
           steps={[
             "Financial Audit: Let AI find leaks and reduce overhead",
@@ -6677,7 +6679,7 @@ function HelpSection() {
               <p className="text-zinc-400 leading-relaxed">
                 Micheal Sakwa is a visionary software developer dedicated to building innovative solutions that empower small businesses. 
                 With a focus on user experience and robust financial accuracy, he creates tools that simplify complex business processes. 
-                JENA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.
+                JENNA POS is a testament to his commitment to delivering high-quality, scalable software that addresses real-world challenges.
               </p>
               <div className="flex flex-wrap gap-6 pt-4">
                 <a href="https://github.com/MikeTymer" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-bold transition-colors">
@@ -7298,7 +7300,7 @@ function AffiliateView({ user, showNotification, setActiveTab }: { user: any, sh
               </p>
             </div>
             <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-              Share JENA POS with your network and earn a <span className="text-indigo-500 font-bold">10% commission</span> for every business that signs up and makes their one-time payment.
+              Share JENNA POS Business Suit with your network and earn a <span className="text-indigo-500 font-bold">10% commission</span> for every business that signs up and makes their one-time payment.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
@@ -7703,14 +7705,14 @@ function TermsAndConditions({ onBack }: { onBack: () => void }) {
         <section className="space-y-4">
           <h2 className="text-2xl font-bold text-zinc-100">1. Acceptance of Terms</h2>
           <p>
-            By accessing and using JENA POS (the "App"), you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use the App.
+            By accessing and using JENNA POS Business Suit (the "App"), you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use the App.
           </p>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-2xl font-bold text-zinc-100">2. Description of Service</h2>
           <p>
-            JENA POS is a point-of-sale and inventory management system designed for small businesses. We provide tools for tracking sales, managing stock, and generating reports.
+            JENNA POS is a point-of-sale and inventory management system designed for small businesses. We provide tools for tracking sales, managing stock, and generating reports.
           </p>
         </section>
 
@@ -7746,7 +7748,7 @@ function TermsAndConditions({ onBack }: { onBack: () => void }) {
         <section className="space-y-4">
           <h2 className="text-2xl font-bold text-zinc-100">6. Limitation of Liability</h2>
           <p>
-            JENA POS is provided "as is" without warranties of any kind. We are not liable for any direct, indirect, or incidental damages arising from your use of the App, including data loss or business interruption.
+            JENNA POS is provided "as is" without warranties of any kind. We are not liable for any direct, indirect, or incidental damages arising from your use of the App, including data loss or business interruption.
           </p>
         </section>
 
@@ -7904,7 +7906,7 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
               <ShieldCheck className="w-6 h-6 text-indigo-500" />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-zinc-100 tracking-tighter uppercase italic">Welcome to JENA POS</h2>
+              <h2 className="text-2xl font-black text-zinc-100 tracking-tighter uppercase italic">Welcome to JENNA POS</h2>
               <p className="text-sm text-zinc-500">Logged in as <span className="text-indigo-400 font-medium">{userProfile?.email}</span></p>
               <p className="text-xs text-zinc-600 mt-1">Please review and accept our terms to continue</p>
             </div>
@@ -7924,7 +7926,7 @@ function TermsAcceptanceModal({ userProfile }: { userProfile: UserProfile }) {
           <div className="prose prose-invert max-w-none space-y-8 text-zinc-400 leading-relaxed">
             <section className="space-y-4">
               <h3 className="text-xl font-bold text-zinc-100 uppercase tracking-tight">Terms & Conditions</h3>
-              <p>By using JENA POS, you agree to these terms. JENA POS provides inventory and sales management tools for small businesses. We offer a 3-month free trial for your first shop, followed by a one-time $10 fee for lifetime access. Additional shops require a monthly subscription.</p>
+              <p>By using JENNA POS, you agree to these terms. JENNA POS provides inventory and sales management tools for small businesses. We offer a 3-month free trial for your first shop, followed by a one-time $10 fee for lifetime access. Additional shops require a monthly subscription.</p>
               <p>You are responsible for your account security and data accuracy. We are not liable for business interruptions or data loss. We reserve the right to modify these terms at any time.</p>
             </section>
 
@@ -8797,7 +8799,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
       const urlParams = new URLSearchParams(window.location.search);
       let rawReferralCode = urlParams.get('ref');
       try {
-        rawReferralCode = rawReferralCode || localStorage.getItem('jena_pos_ref');
+        rawReferralCode = rawReferralCode || localStorage.getItem('jenna_pos_ref');
       } catch (e) {}
       const referralCode = rawReferralCode?.trim().toUpperCase();
 
@@ -8985,7 +8987,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
           <div className="bg-indigo-600/20 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto">
             <Building2 className="w-10 h-10 text-indigo-500" />
           </div>
-          <h2 className="text-3xl font-bold text-zinc-100">Welcome to JENA POS</h2>
+          <h2 className="text-3xl font-bold text-zinc-100">Welcome to JENNA POS</h2>
           <p className="text-zinc-400">Logged in as <span className="text-indigo-400 font-medium">{user?.email || userProfile?.email}</span></p>
           <p className="text-zinc-400">To get started, create your first business organization profile or find an existing one.</p>
           <div className="space-y-3">
@@ -9142,7 +9144,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
               )}
               {isSidebarOpen && (
                 <div className="flex flex-col">
-                  <span className="text-xl font-bold text-zinc-100 tracking-tight leading-none">JENA POS</span>
+                  <span className="text-xl font-bold text-zinc-100 tracking-tight leading-none">JENNA POS</span>
                   <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mt-1 truncate max-w-[120px]">
                     {currentOrg?.name || 'Business'}
                   </span>
@@ -9409,7 +9411,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                 )}
                 <div className="absolute top-full mt-2 right-0 w-48 bg-zinc-900 border border-zinc-800 p-3 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                   <p className="text-xs font-bold text-zinc-100">Need help?</p>
-                  <p className="text-[10px] text-zinc-400 mt-1">Click here to learn how to use JENA POS</p>
+                  <p className="text-[10px] text-zinc-400 mt-1">Click here to learn how to use JENNA POS</p>
                 </div>
               </button>
             </div>
@@ -9852,7 +9854,7 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
                               </div>
                               <div>
                                 <h3 className="text-xl font-bold text-zinc-100">Affiliate Program</h3>
-                                <p className="text-sm text-zinc-500">Earn commissions by referring other businesses to JENA POS</p>
+                                <p className="text-sm text-zinc-500">Earn commissions by referring other businesses to JENNA POS Business Suit</p>
                               </div>
                             </div>
 
@@ -10130,7 +10132,7 @@ function AuthScreen() {
   useEffect(() => {
     const checkReferral = async () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const refCode = urlParams.get('ref') || localStorage.getItem('jena_pos_ref');
+      const refCode = urlParams.get('ref') || localStorage.getItem('jenna_pos_ref');
       if (refCode) {
         try {
           const affiliatesSnap = await getDocs(query(collection(db, 'affiliates'), where('affiliateCode', '==', refCode.trim().toUpperCase())));
@@ -10139,7 +10141,7 @@ function AuthScreen() {
             const userDoc = await getDoc(doc(db, 'users', affiliateData.uid));
             if (userDoc.exists()) {
               setReferrerName(userDoc.data().displayName);
-              localStorage.setItem('jena_pos_ref', refCode.trim().toUpperCase());
+              localStorage.setItem('jenna_pos_ref', refCode.trim().toUpperCase());
             }
           }
         } catch (err) {
@@ -10181,7 +10183,7 @@ function AuthScreen() {
           }
         }
       } else if (additionalInfo?.isNewUser) {
-        setMessage("Welcome to JENA POS! Your account has been created.");
+        setMessage("Welcome to JENNA POS Business Suit! Your account has been created.");
       }
     } catch (err: any) {
       console.error("Login failed:", err);
@@ -10215,7 +10217,7 @@ function AuthScreen() {
           <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-2xl shadow-indigo-600/40">
             <Sparkles className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-4xl font-black text-zinc-100 tracking-tight">JENA POS</h1>
+          <h1 className="text-4xl font-black text-zinc-100 tracking-tight">JENNA POS BUSINESS SUIT</h1>
           <p className="text-zinc-400 text-lg">The modern operating system for your business finances.</p>
         </div>
 
@@ -10353,7 +10355,7 @@ function AppContent() {
     
     if (refCode) {
       try {
-        localStorage.setItem('jena_pos_ref', refCode);
+        localStorage.setItem('jenna_pos_ref', refCode);
       } catch (e) {}
       
       let isTracked = false;
@@ -10392,7 +10394,7 @@ function AppContent() {
   }, []);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
-      const saved = localStorage.getItem('jena-pos-theme');
+      const saved = localStorage.getItem('jenna-pos-theme');
       if (saved === 'light' || saved === 'dark') return saved;
     } catch (e) {}
     
@@ -10405,7 +10407,7 @@ function AppContent() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('jena-pos-theme', theme);
+      localStorage.setItem('jenna-pos-theme', theme);
     } catch (e) {}
     if (theme === 'light') {
       document.documentElement.classList.add('light');

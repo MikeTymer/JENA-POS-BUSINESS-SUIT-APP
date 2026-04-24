@@ -37,14 +37,14 @@ async function startServer() {
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || '"JENA POS" <noreply@jena-pos.com>',
+      from: process.env.EMAIL_FROM || '"JENNA POS" <noreply@jenna-pos.com>',
       to: email,
-      subject: `Welcome to JENA POS - ${businessName} Created!`,
+      subject: `Welcome to JENNA POS Business Suit - ${businessName} Created!`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; rounded: 12px;">
-          <h2 style="color: #4f46e5;">Welcome to JENA POS!</h2>
+          <h2 style="color: #4f46e5;">Welcome to JENNA POS!</h2>
           <p>Hello,</p>
-          <p>Thank you for joining JENA POS. We are excited to help you manage your business more efficiently.</p>
+          <p>Thank you for joining JENNA POS. We are excited to help you manage your business more efficiently.</p>
           <p>Your business <strong>${businessName}</strong> (ID: ${businessId}) has been successfully created and is ready for use.</p>
           <div style="margin: 30px 0;">
             <a href="${loginUrl}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Login to Your Dashboard</a>
@@ -85,9 +85,9 @@ async function startServer() {
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || '"JENA POS" <noreply@jena-pos.com>',
+      from: process.env.EMAIL_FROM || '"JENNA POS" <noreply@jenna-pos.com>',
       to: email,
-      subject: `[JENA POS] ${title}`,
+      subject: `[JENNA POS] ${title}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
           <h2 style="color: #4f46e5;">New Notification</h2>
@@ -96,9 +96,9 @@ async function startServer() {
             <h3 style="margin-top: 0; color: #111827;">${title}</h3>
             <p style="color: #4b5563; line-height: 1.5;">${message}</p>
           </div>
-          <p style="font-size: 14px; color: #6b7280;">You can view more details by logging into your JENA POS dashboard.</p>
+          <p style="font-size: 14px; color: #6b7280;">You can view more details by logging into your JENNA POS dashboard.</p>
           <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
-          <p style="font-size: 12px; color: #9ca3af;">This is an automated notification from JENA POS. Please do not reply.</p>
+          <p style="font-size: 12px; color: #9ca3af;">This is an automated notification from JENNA POS. Please do not reply.</p>
         </div>
       `,
     };
