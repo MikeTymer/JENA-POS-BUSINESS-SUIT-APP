@@ -7459,7 +7459,11 @@ function AffiliateView({ user, showNotification, setActiveTab }: { user: any, sh
                     <div className="flex flex-col">
                       <span className="text-sm font-bold text-zinc-100">{ref.referredOrgName || 'New Business'}</span>
                       <span className="text-xs text-zinc-500">
-                        {(!ref.referredEmail || ['n/a', 'undefined', 'null', ''].includes(String(ref.referredEmail).toLowerCase())) ? 'Old Record' : ref.referredEmail}
+                        {ref.referredEmail && !['n/a', 'undefined', 'null', ''].includes(String(ref.referredEmail).toLowerCase()) ? (
+                          <span className="text-indigo-400 font-medium">{ref.referredEmail}</span>
+                        ) : (
+                          <span className="italic">Email not captured</span>
+                        )}
                       </span>
                     </div>
                   </td>
@@ -7561,8 +7565,12 @@ function ReferralsListView({ user, onBack }: { user: any, onBack: () => void }) 
                 <tr key={idx} className="hover:bg-zinc-800/30 transition-colors">
                   <td className="px-6 py-4 text-sm text-zinc-400">{formatDate(ref.createdAt)}</td>
                   <td className="px-6 py-4 text-sm font-bold text-zinc-100">{ref.referredOrgName || 'N/A'}</td>
-                  <td className="px-6 py-4 text-sm text-zinc-400">
-                    {(!ref.referredEmail || ['n/a', 'undefined', 'null', ''].includes(String(ref.referredEmail).toLowerCase())) ? 'Not captured (Old Record)' : ref.referredEmail}
+                  <td className="px-6 py-4 text-sm">
+                    {ref.referredEmail && !['n/a', 'undefined', 'null', ''].includes(String(ref.referredEmail).toLowerCase()) ? (
+                      <span className="text-indigo-400 font-medium">{ref.referredEmail}</span>
+                    ) : (
+                      <span className="text-zinc-500 italic">Email not captured</span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span className={cn(
@@ -8862,12 +8870,13 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
         if (!affiliatesSnap.empty) {
           const affiliate = affiliatesSnap.docs[0].data();
           
-          // Extremely robust email capture
-          let emailToSave = user?.email || userProfile?.email || auth.currentUser?.email;
+          // Robust email capture - Use the organization owner email we just created
+          let emailToSave = newOrgData.ownerEmail || user?.email || userProfile?.email || auth.currentUser?.email;
           
-          if (!emailToSave) {
+          if (!emailToSave || emailToSave === '') {
             try {
-              const userDoc = await getDoc(doc(db, 'users', user.uid));
+              const userDocRef = doc(db, 'users', user.uid);
+              const userDoc = await getDoc(userDocRef);
               if (userDoc.exists()) {
                 emailToSave = userDoc.data().email;
               }
@@ -8876,7 +8885,10 @@ function MainApp({ theme, setTheme }: { theme: 'light' | 'dark', setTheme: (t: '
             }
           }
           
-          emailToSave = emailToSave || 'N/A';
+          // Final fallback
+          if (!emailToSave || emailToSave === '') {
+            emailToSave = 'N/A';
+          }
           
           console.log('Creating referral record. Email:', emailToSave, 'Org:', newOrgName, 'Affiliate:', affiliate.affiliateCode);
           await setDocument('referrals', referralId, {

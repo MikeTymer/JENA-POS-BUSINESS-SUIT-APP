@@ -16,6 +16,16 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  
+  // Health Check Endpoint (DevOps)
+  app.get('/health', (req, res) => {
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      version: '1.0.0'
+    });
+  });
 
   // Email Transporter Setup
   const transporter = nodemailer.createTransport({
