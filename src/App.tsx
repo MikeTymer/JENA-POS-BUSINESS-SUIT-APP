@@ -819,14 +819,14 @@ We are currently syncing with live network nodes. Your future-ready business ana
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col h-[700px]">
-      <div className="p-6 border-b border-zinc-800 bg-zinc-800/30 flex items-center justify-between">
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden flex flex-col h-[700px]">
+      <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/30 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-indigo-500/20 p-2 rounded-xl">
             <Sparkles className="w-5 h-5 text-indigo-400" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-zinc-100">AI Business Analyst</h3>
+            <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">AI Business Analyst</h3>
             <p className="text-zinc-500 text-xs tracking-wide uppercase font-bold">Ask anything about your business performance</p>
           </div>
         </div>
@@ -839,8 +839,8 @@ We are currently syncing with live network nodes. Your future-ready business ana
               <BarChart3 className="w-12 h-12 text-indigo-400" />
             </div>
             <div className="max-w-sm">
-              <p className="text-zinc-100 font-bold">Hello! I'm your JENNA AI Analyst.</p>
-              <p className="text-sm text-zinc-400">Ask me things like "How is my profit margin?", "Which products are performing best?", or "How can I reduce my expenses?"</p>
+              <p className="text-zinc-900 dark:text-zinc-100 font-bold">Hello! I'm your JENNA AI Analyst.</p>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">Ask me things like "How is my profit margin?", "Which products are performing best?", or "How can I reduce my expenses?"</p>
             </div>
           </div>
         )}
@@ -855,11 +855,14 @@ We are currently syncing with live network nodes. Your future-ready business ana
               m.role === 'user' 
                 ? "bg-indigo-600 text-white rounded-tr-none" 
                 : m.content.includes("Coming Soon")
-                  ? "bg-blue-900/30 text-zinc-100 border border-blue-500/40 rounded-tl-none shadow-lg shadow-blue-500/10 pr-6 sm:pr-8 w-full"
-                  : "bg-zinc-800 text-zinc-100 border border-zinc-700 rounded-tl-none pr-6 sm:pr-8"
+                  ? "bg-blue-100/50 dark:bg-blue-900/30 text-blue-900 dark:text-zinc-100 border border-blue-200 dark:border-blue-500/40 rounded-tl-none shadow-lg shadow-blue-500/10 pr-6 sm:pr-8 w-full"
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-700 rounded-tl-none pr-6 sm:pr-8 shadow-sm"
             )}>
               {m.role === 'assistant' ? (
-                <div className="markdown-body prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-700">
+                <div className={cn(
+                  "markdown-body prose prose-sm max-w-none prose-p:leading-relaxed",
+                  "dark:prose-invert prose-pre:bg-zinc-50 dark:prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-200 dark:prose-pre:border-zinc-700"
+                )}>
                   <Markdown remarkPlugins={[remarkGfm]}>{m.content}</Markdown>
                 </div>
               ) : (
@@ -880,7 +883,7 @@ We are currently syncing with live network nodes. Your future-ready business ana
         )}
       </div>
       
-      <div className="p-6 border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-xl">
+      <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 backdrop-blur-xl">
         <div className="relative flex items-center">
           <input 
             type="text"
@@ -888,7 +891,7 @@ We are currently syncing with live network nodes. Your future-ready business ana
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Ask your AI analyst a question..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-4 text-zinc-200 text-sm focus:outline-none focus:border-indigo-500 transition-all pr-16"
+            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-6 py-4 text-zinc-900 dark:text-zinc-200 text-sm focus:outline-none focus:border-indigo-500 transition-all pr-16 shadow-inner"
           />
           <button 
             onClick={handleSend}
@@ -6482,8 +6485,8 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
         ))}
       </div>
 
-      <div className="bg-zinc-800/30 p-8 rounded-3xl border border-zinc-800/50 relative z-10">
-        <h3 className="text-xl font-bold text-white mb-6">Enterprise Features</h3>
+      <div className="bg-zinc-50 dark:bg-zinc-800/30 p-8 rounded-3xl border border-zinc-200 dark:border-zinc-800/50 relative z-10">
+        <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-6">Enterprise Features</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
             "Multi-organization deployment support",
@@ -6493,9 +6496,9 @@ function SystemOverviewDoc({ currentOrg }: { currentOrg: any }) {
             "Damages tracking with image evidence",
             "Affiliate marketing and referral automation"
           ].map((feature, i) => (
-            <div key={i} className="flex items-center gap-3 text-zinc-400">
+            <div key={i} className="flex items-center gap-3 text-zinc-800 dark:text-zinc-400">
               <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-              <span className="text-sm font-medium">{feature}</span>
+              <span className="text-sm font-semibold dark:font-medium">{feature}</span>
             </div>
           ))}
         </div>
